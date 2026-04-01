@@ -1,0 +1,17 @@
+{
+    "app_name": "Telepage",
+    "theme_color": "#3b82f6",
+    "db_path": "/absolute/path/to/project/data/app.sqlite",
+    "telegram_bot_token": "",
+    "telegram_channel_id": "",
+    "webhook_secret": "",
+    "language": "it",
+    "installed": false,
+    "ai_enabled": false,
+    "ai_auto_tag": false,
+    "ai_auto_summary": false,
+    "items_per_page": 12,
+    "pagination_type": "classic",
+    "custom_webhook_url": "",
+    "download_media": true
+}

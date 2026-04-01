@@ -27,13 +27,6 @@ You post on Telegram  →  Webhook fires instantly  →  Card appears on your si
 
 ---
 
-## Live Demos
-
-- **Science/News channel:** [scibilo.net/telepage](https://www.scibilo.net/telepage/)
-- **Recipes channel:** [scibilo.net/ricette](https://www.scibilo.net/ricette/)
-
----
-
 ## Features
 
 ### ⚡ Real-Time Sync

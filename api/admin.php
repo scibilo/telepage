@@ -27,7 +27,7 @@ require_once TELEPAGE_ROOT . '/app/Scraper.php';
 ini_set('session.cookie_httponly', '1');
 ini_set('session.cookie_samesite', 'Strict');
 // Sessione isolata per installazione: evita che due istanze su stesso dominio condividano la sessione
-session_name('tp_' . substr(md5(TELEPAGE_ROOT), 0, 12));
+session_name('tp_' . substr(sha256(TELEPAGE_ROOT), 0, 12));
 session_start();
 
 if (empty($_SESSION['admin_logged_in'])) {

@@ -1,10 +1,4 @@
 <?php
-/**
- * TELEPAGE — index.php
- * Frontend pubblico principale.
- * Caricamento asincrono contenuti via AJAX (api/contents.php).
- */
-
 declare(strict_types=1);
 
 define('TELEPAGE_ROOT', __DIR__);
@@ -12,7 +6,7 @@ define('TELEPAGE_ROOT', __DIR__);
 // Cache e sessione PRIMA di qualsiasi output
 ini_set('session.cookie_httponly', '1');
 ini_set('session.cookie_samesite', 'Strict');
-session_name('tp_' . substr(md5(TELEPAGE_ROOT), 0, 12));
+session_name('tp_' . substr(hash('sha256', TELEPAGE_ROOT), 0, 16));
 session_start();
 
 // No-cache: forza sempre contenuto fresco (sidebar admin, tag aggiornati)
@@ -116,16 +110,16 @@ $faviconV = $config['logo_updated'] ?? filemtime(TELEPAGE_ROOT . '/' . $faviconP
     
     <!-- Scripting Config -->
     <script>
-        window.TELEPAGE_CONFIG = {
-            isAdmin: <?= $isAdmin ? 'true' : 'false' ?>,
-            appName: "<?= addslashes($appName) ?>",
-            lang: <?= json_encode($lang) ?>,
-            initialTag: "<?= addslashes($initialTag) ?>",
-            initialType: "<?= addslashes($initialType) ?>",
-            initialSearch: "<?= addslashes($initialSearch) ?>",
-            paginationType: "<?= $config['pagination_type'] ?? 'classic' ?>",
-            accentColor: "<?= $themeColor ?>"
-        };
+        window.TELEPAGE_CONFIG = <?= json_encode([
+            'isAdmin'        => (bool) $isAdmin,
+            'appName'        => $appName,
+            'lang'           => $lang,
+            'initialTag'     => $initialTag,
+            'initialType'    => $initialType,
+            'initialSearch'  => $initialSearch,
+            'paginationType' => $config['pagination_type'] ?? 'classic',
+            'accentColor'    => $themeColor,
+        ], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;
     </script>
 </head>
 <?php $siteTheme = $config['site_theme'] ?? 'dark'; ?>

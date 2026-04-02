@@ -30,7 +30,7 @@ ini_set('session.cookie_httponly', '1');
 ini_set('session.cookie_samesite', 'Strict');
 ini_set('session.gc_maxlifetime', '28800'); // 8 ore
 // Sessione isolata per installazione (evita cross-login tra istanze sullo stesso dominio)
-session_name('tp_' . substr(md5(TELEPAGE_ROOT), 0, 12));
+session_name('tp_' . substr(sha256(TELEPAGE_ROOT), 0, 12));
 session_start();
 
 // Già loggato?

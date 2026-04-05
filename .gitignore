@@ -1,0 +1,30 @@
+# Sensitive configuration
+config.json
+
+# Database
+data/app.sqlite
+data/app.sqlite-wal
+data/app.sqlite-shm
+data/backups/*.sqlite
+
+# User media
+assets/media/*
+!assets/media/.gitkeep
+
+# Logs
+data/*.log
+data/logs/
+
+# Debug tools (remove before publishing)
+diag.php
+sw-clear.php
+
+# System files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# IDE
+.vscode/
+.idea/

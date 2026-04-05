@@ -1,0 +1,119 @@
+<?php
+
+/**
+ * TELEPAGE — api/webhook.php
+ * Entry point for Telegram updates.
+ *
+ * Rule: responds to Telegram within 5 seconds.
+ *       Heavy processing starts AFTER the response.
+ * Rule: validates X-Telegram-Bot-Api-Secret-Token as the FIRST instruction.
+ */
+
+declare(strict_types=1);
+
+// Defines project root (2 levels up: api/ → telepage/)
+define('TELEPAGE_ROOT', dirname(__DIR__));
+
+require_once TELEPAGE_ROOT . '/app/Config.php';
+require_once TELEPAGE_ROOT . '/app/DB.php';
+require_once TELEPAGE_ROOT . '/app/Logger.php';
+require_once TELEPAGE_ROOT . '/app/Scraper.php';
+require_once TELEPAGE_ROOT . '/app/TelegramBot.php';
+
+// -----------------------------------------------------------------------
+// Validate secret token BEFORE any other operation
+// -----------------------------------------------------------------------
+
+$config        = Config::get();
+$expectedSecret = $config['webhook_secret'] ?? '';
+
+// Must be configured — if empty, reject everything
+if (empty($expectedSecret)) {
+    http_response_code(403);
+    exit('Webhook secret not configured');
+}
+
+$receivedSecret = $_SERVER['HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN'] ?? '';
+
+if (!hash_equals($expectedSecret, $receivedSecret)) {
+    // Log the unauthorised attempt
+    // We don't use Logger here to avoid DB dependency during a flood attack
+    http_response_code(403);
+    exit;
+}
+
+// -----------------------------------------------------------------------
+// Accept only POST with JSON body
+// -----------------------------------------------------------------------
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    exit;
+}
+
+// Verify installation is complete
+if (!Config::isInstalled()) {
+    http_response_code(503);
+    exit;
+}
+
+// -----------------------------------------------------------------------
+// Read and decode the body
+// -----------------------------------------------------------------------
+
+$rawBody = file_get_contents('php://input');
+
+if (empty($rawBody)) {
+    http_response_code(400);
+    exit;
+}
+
+$update = json_decode($rawBody, true);
+
+if (!is_array($update)) {
+    http_response_code(400);
+    exit;
+}
+
+// -----------------------------------------------------------------------
+// Immediate response to Telegram (within 5 seconds)
+// Send 200 OK, then process in background
+// -----------------------------------------------------------------------
+
+// Close HTTP connection (technique: flush + ignore_user_abort)
+ignore_user_abort(true);
+header('Content-Type: application/json');
+header('Connection: close');
+header('Content-Length: 2');
+ob_start();
+echo '{}';
+$size = ob_get_length();
+
+// Update actual Content-Length
+header('Content-Length: ' . $size);
+http_response_code(200);
+
+ob_end_flush();
+if (function_exists('fastcgi_finish_request')) {
+    fastcgi_finish_request(); // PHP-FPM: closes the connection immediately
+} else {
+    flush();
+    // For non-FPM servers: increase max_execution_time for background processing
+    set_time_limit(60);
+}
+
+// -----------------------------------------------------------------------
+// Background processing (after sending 200 OK)
+// -----------------------------------------------------------------------
+
+try {
+    $contentId = TelegramBot::handleUpdate($update);
+    
+    // If the ID is valid and AI is enabled, process immediately (we are already in background)
+    if ($contentId && ($config['ai_enabled'] ?? false)) {
+        require_once TELEPAGE_ROOT . '/app/AIService.php';
+        AIService::processContent($contentId);
+    }
+} catch (Throwable $e) {
+    error_log('[TELEPAGE][WEBHOOK] ' . $e->getMessage());
+}

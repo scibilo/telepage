@@ -1,0 +1,99 @@
+# =====================================================================
+# TELEPAGE — .htaccess
+# =====================================================================
+
+Options -Indexes
+DirectoryIndex index.php
+
+# -----------------------------------------------------------------------
+# 1. PROTEZIONE FILE SENSIBILI
+# -----------------------------------------------------------------------
+<Files "config.json">
+    Require all denied
+</Files>
+<FilesMatch "\.json$">
+    Require all denied
+</FilesMatch>
+<FilesMatch "\.(md|txt|sql|sh|log)$">
+    Require all denied
+</FilesMatch>
+<Files "reset.txt">
+    Require all denied
+</Files>
+
+# -----------------------------------------------------------------------
+# 2. HEADERS SICUREZZA
+# -----------------------------------------------------------------------
+<IfModule mod_headers.c>
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set X-XSS-Protection "1; mode=block"
+    <FilesMatch "\.(css|js|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf)$">
+        Header set Cache-Control "max-age=86400, public"
+    </FilesMatch>
+</IfModule>
+
+# -----------------------------------------------------------------------
+# 3. PROTEZIONI DIRECTORY
+# -----------------------------------------------------------------------
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Blocca accesso diretto a data/
+    RewriteRule ^data/ - [F,L]
+
+    # Blocca accesso diretto a directives/
+    RewriteRule ^directives/ - [F,L]
+</IfModule>
+
+# -----------------------------------------------------------------------
+# 4. PHP
+# -----------------------------------------------------------------------
+<IfModule mod_php.c>
+    php_flag display_errors Off
+    php_flag log_errors On
+</IfModule>
+
+# -----------------------------------------------------------------------
+# 5. DISABILITA CACHE SERVER per index.php (LiteSpeed, Varnish, Nginx)
+# -----------------------------------------------------------------------
+<IfModule mod_headers.c>
+    <FilesMatch "^index\.php$">
+        Header always set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        Header always set Pragma "no-cache"
+        Header always set Surrogate-Control "no-store"
+        Header always set X-Accel-Expires "0"
+        Header always unset ETag
+        Header always unset Last-Modified
+    </FilesMatch>
+</IfModule>
+
+# LiteSpeed Cache: escludi index.php
+<IfModule LiteSpeed>
+    CacheDisable /index.php
+</IfModule>
+
+# -----------------------------------------------------------------------
+# 6. DISABILITA CACHE LITESPEED per TUTTI i file PHP (non solo index)
+# -----------------------------------------------------------------------
+<IfModule LiteSpeed>
+    CacheDisable public /
+    RewriteEngine On
+    RewriteRule .* - [E=Cache-Control:no-cache]
+</IfModule>
+
+# Per Apache con mod_cache
+<IfModule mod_cache.c>
+    CacheDisable /
+</IfModule>
+
+# Forza no-cache su tutti i .php
+<IfModule mod_headers.c>
+    <FilesMatch "\.php$">
+        Header always set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+        Header always set Pragma "no-cache"
+        Header always set Surrogate-Control "no-store"
+        Header always unset ETag
+    </FilesMatch>
+</IfModule>

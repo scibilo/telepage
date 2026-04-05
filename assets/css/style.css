@@ -1,0 +1,569 @@
+/* 
+ * TELEPAGE — style.css
+ * Modern, vibrant, dark-first design system.
+ * Glassmorphism, smooth transitions, responsive grid.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Outfit:wght@100..900&display=swap');
+
+:root {
+    /* Color Palette */
+    --bg-color: #030712;
+    --card-bg: #111827;
+    --card-border: #1f2937;
+    --accent-color: #3b82f6; /* Default Blue */
+    --accent-glow: rgba(59, 130, 246, 0.3);
+    --text-main: #f3f4f6;
+    --text-muted: #9ca3af;
+    --white: #ffffff;
+    --glass-bg: rgba(17, 24, 39, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    
+    /* Spacing & Sizing */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 20px;
+    --container-max: 1280px;
+}
+
+/* -----------------------------------------------------------------------
+ * TEMI — applicati via classe su <body>
+ * dark (default), ocean, forest, sunset, rose, slate
+ * ----------------------------------------------------------------------- */
+
+body.theme-ocean {
+    --bg-color: #020f1a;
+    --card-bg: #0a1f2e;
+    --card-border: #0e3147;
+    --text-muted: #7fb3c8;
+}
+body.theme-forest {
+    --bg-color: #020d06;
+    --card-bg: #0a1f10;
+    --card-border: #0e3118;
+    --text-muted: #7fb895;
+}
+body.theme-sunset {
+    --bg-color: #130a02;
+    --card-bg: #1f1008;
+    --card-border: #31190a;
+    --text-muted: #c8957b;
+}
+body.theme-rose {
+    --bg-color: #130208;
+    --card-bg: #1f0810;
+    --card-border: #310a18;
+    --text-muted: #c87f95;
+}
+body.theme-slate {
+    --bg-color: #0a0b0f;
+    --card-bg: #12141a;
+    --card-border: #1e2130;
+    --text-muted: #8890a8;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-font-smoothing: antialiased;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    font-family: 'Inter', system-ui, sans-serif;
+    line-height: 1.5;
+    min-height: 100vh;
+    overflow-x: hidden;
+    background-image: 
+        radial-gradient(circle at 0% 0%, rgba(59, 130, 246, 0.05) 0%, transparent 50%),
+        radial-gradient(circle at 100% 100%, rgba(139, 92, 246, 0.05) 0%, transparent 50%);
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); opacity: 0.8; }
+    50% { transform: scale(1.05); opacity: 1; }
+    100% { transform: scale(1); opacity: 0.8; }
+}
+
+/* Base Components */
+.container {
+    width: 100%;
+    max-width: var(--container-max);
+    margin: 0 auto;
+    padding: 0 24px;
+}
+
+/* Sidebar / Drawer Layout */
+.app-layout {
+    display: flex;
+    min-height: 100vh;
+}
+
+.sidebar {
+    width: 300px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    padding: 40px 24px;
+    border-right: 1px solid var(--card-border);
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    overflow-y: auto;
+    z-index: 100;
+}
+
+.main-content {
+    flex: 1;
+    padding: 40px 0;
+}
+
+/* Header */
+.header {
+    margin-bottom: 48px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    text-decoration: none;
+}
+
+.brand-icon {
+    width: 44px;
+    height: 44px;
+    background: linear-gradient(135deg, var(--accent-color), #8b5cf6);
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    box-shadow: 0 10px 25px var(--accent-glow);
+    flex-shrink: 0;
+}
+
+.brand-logo {
+    max-width: 48px;
+    max-height: 48px;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    object-position: center;
+    flex-shrink: 0;
+}
+
+.brand-name {
+    font-family: 'Outfit', sans-serif;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-main);
+    letter-spacing: -1px;
+}
+
+/* Search Bar */
+.search-wrapper {
+    position: relative;
+    max-width: 600px;
+    width: 100%;
+}
+
+.search-input {
+    width: 100%;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    padding: 14px 20px 14px 48px;
+    border-radius: var(--radius-md);
+    color: var(--text-main);
+    font-size: 16px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    outline: none;
+}
+
+.search-input:focus {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 4px var(--accent-glow);
+}
+
+.search-icon {
+    position: absolute;
+    left: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    font-size: 20px;
+}
+
+/* Tags Cloud in Sidebar */
+.section-title {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+}
+
+.tag-cloud {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding-bottom: 16px;
+}
+
+.tag-btn {
+    padding: 3px 10px;
+    background: var(--card-bg);
+    border: 1px solid var(--tag-color, var(--card-border));
+    border-radius: 100px;
+    color: var(--tag-color, var(--text-muted));
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+}
+
+.tag-btn:hover, .tag-btn.active {
+    background: var(--tag-color, var(--accent-color));
+    color: #fff;
+    border-color: var(--tag-color, var(--accent-color));
+    box-shadow: 0 2px 8px rgba(0,0,0,.3);
+    transform: translateY(-1px);
+}
+
+/* Type Filters */
+.type-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.filter-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: all 0.2s;
+}
+
+.filter-item:hover, .filter-item.active {
+    background: rgba(255,255,255,0.05);
+    color: var(--text-main);
+}
+
+.filter-item.active {
+    border-left: 3px solid var(--accent-color);
+    padding-left: 13px;
+    background: rgba(59, 130, 246, 0.1);
+    color: var(--accent-color);
+}
+
+/* Content Grid */
+.content-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 32px;
+    animation: fadeIn 0.6s ease-out;
+}
+
+/* Content Card */
+.content-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+.content-card:hover {
+    transform: translateY(-8px) scale(1.02);
+    border-color: var(--accent-color);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+.card-media {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16/9;
+    overflow: hidden;
+    background: #1f2937;
+}
+
+.card-media img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.5s;
+}
+
+.content-card:hover .card-media img {
+    transform: scale(1.1);
+}
+
+.card-type-badge {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    z-index: 2;
+    border: 1px solid var(--glass-border);
+}
+
+.card-content {
+    padding: 24px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.card-source {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+}
+
+.card-favicon {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+}
+
+.card-title {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    color: var(--text-main);
+    line-height: 1.4;
+}
+
+.card-description {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 20px;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    flex: 1;
+}
+
+.card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 20px;
+}
+
+.card-tag {
+    font-size: 10px;
+    color: var(--tag-color, #6c757d);
+    border: 1px solid var(--tag-color, #6c757d);
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 100px;
+    background: transparent;
+}
+
+.card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 16px;
+    border-top: 1px solid var(--card-border);
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.view-btn {
+    text-decoration: none;
+    color: var(--accent-color);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Pagination */
+.pagination {
+    margin-top: 64px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+}
+
+.page-btn {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--card-border);
+    background: var(--card-bg);
+    color: var(--text-main);
+    border-radius: var(--radius-sm);
+    text-decoration: none;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.page-btn:hover, .page-btn.active {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    box-shadow: 0 4px 12px var(--accent-glow);
+}
+
+.load-more-btn {
+    padding: 14px 40px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    color: var(--text-main);
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.load-more-btn:hover {
+    border-color: var(--accent-color);
+    background: rgba(59, 130, 246, 0.1);
+}
+
+/* Skeleton / Loading */
+.skeleton {
+    background: linear-gradient(90deg, #111827 25%, #1f2937 50%, #111827 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* Responsive Tablet */
+@media (max-width: 1024px) {
+    .sidebar { width: 260px; }
+}
+
+/* Mobile Layout */
+@media (max-width: 768px) {
+    .app-layout { flex-direction: column; }
+    .sidebar {
+        width: 100%;
+        height: auto;
+        position: relative;
+        padding: 24px;
+        border-right: none;
+        border-bottom: 1px solid var(--card-border);
+    }
+    .main-content { padding: 32px 0; }
+    .content-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Pulsante cestino admin ────────────────────────────────────────── */
+.delete-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: rgba(239, 68, 68, 0.85);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    width: 32px;
+    height: 32px;
+    font-size: 15px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity .2s, transform .2s;
+    z-index: 10;
+    backdrop-filter: blur(4px);
+}
+.content-card:hover .delete-btn {
+    opacity: 1;
+}
+.delete-btn:hover {
+    background: rgba(239, 68, 68, 1);
+    transform: scale(1.1);
+}
+
+/* ── Tag cliccabili nelle card ─────────────────────────────────────── */
+.clickable-tag {
+    cursor: pointer;
+    transition: background .15s, color .15s;
+}
+.clickable-tag:hover {
+    background: var(--accent-color);
+    color: #fff;
+    opacity: 1;
+}
+
+/* ── Link hint ────────────────────────────────────────────────────── */
+.card-link-hint {
+    font-size: 11px;
+    color: var(--accent-color);
+    opacity: 0.7;
+}
+.content-card:hover .card-link-hint {
+    opacity: 1;
+}
+
+/* ── Bottone reset filtri ──────────────────────────────────────────── */
+.btn-reset-filters {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    margin-top: 8px;
+    background: rgba(239, 68, 68, 0.12);
+    color: #fca5a5;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: background .15s;
+}
+.btn-reset-filters:hover {
+    background: rgba(239, 68, 68, 0.25);
+}
+
+/* FIX #4: forza il cestino visibile su touch/mobile */
+@media (hover: none) {
+    .delete-btn { opacity: 1 !important; }
+}

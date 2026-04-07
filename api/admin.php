@@ -806,7 +806,7 @@ function actionScanBatch(): void
     requirePost();
     require_once TELEPAGE_ROOT . '/app/HistoryScanner.php';
 
-    set_time_limit(120);
+    set_time_limit(300); // 5 min — enough for 2000 IDs with rate-limit pauses
 
     $body      = getJsonBody();
     $startId   = (int) ($body['start_id']   ?? 0);
@@ -817,10 +817,23 @@ function actionScanBatch(): void
     }
 
     $result = HistoryScanner::scanBatch($startId, $batchSize);
+
+    // Tell the UI how many contents are pending AI so it can auto-trigger
+    // the AI queue as a separate async call (avoids set_time_limit exhaustion
+    // when Gemini calls are stacked right after a long scan).
+    $config = Config::get();
+    $result['ai_pending'] = 0;
+    if (!empty($config['ai_enabled']) && (!empty($config['ai_auto_tag']) || !empty($config['ai_auto_summary']))) {
+        $result['ai_pending'] = (int) DB::fetchScalar(
+            'SELECT COUNT(*) FROM contents WHERE ai_processed=0 AND is_deleted=0'
+        );
+    }
+
     Logger::admin(Logger::INFO, 'scan_batch', [
-        'start'    => $startId,
-        'imported' => $result['imported'],
-        'skipped'  => $result['skipped'],
+        'start'      => $startId,
+        'imported'   => $result['imported'],
+        'skipped'    => $result['skipped'],
+        'ai_pending' => $result['ai_pending'],
     ]);
     jsonOk($result);
 }

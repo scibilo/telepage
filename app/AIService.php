@@ -215,8 +215,9 @@ PROMPT;
         $data = json_decode(trim($raw), true);
         if (is_array($data)) return $data;
 
-        // Attempt 2: remove markdown backticks
-        $clean = preg_replace('//', '', $clean);
+        // Attempt 2: remove markdown code-fence (```json ... ``` or ``` ... ```)
+        $clean = preg_replace('/^```(?:json)?\s*/i', '', trim($raw));
+        $clean = preg_replace('/\s*```$/', '', $clean);
         $data = json_decode(trim($clean), true);
         if (is_array($data)) return $data;
 

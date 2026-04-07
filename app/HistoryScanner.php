@@ -33,7 +33,7 @@ class HistoryScanner
     private const BATCH_SIZE = 50;
 
     /** Tentativi max per batch (evita loop infiniti su canali sparsi) */
-    private const MAX_ATTEMPTS = 300;
+    private const MAX_ATTEMPTS = 2000;
 
     /** Pause every N attempts (avoids Telegram rate limiting) */
     private const SLEEP_EVERY = 10;
@@ -45,8 +45,13 @@ class HistoryScanner
 
     /**
      * Returns the ID from which to start scanning.
-     * Uses the most recent message known to Telegram (getUpdates offset=-1)
-     * or the DB MAX + a margin.
+     *
+     * Strategy (Opzione A):
+     *  1. Try getUpdates offset=-1 directly (works when webhook is NOT active).
+     *  2. If that fails (HTTP 409 = webhook conflict), temporarily delete the
+     *     webhook, retry getUpdates, then immediately re-attach the webhook —
+     *     the same pattern used by actionSyncTelegram() in admin.php.
+     *  3. Fallback: max(dbMaxId + 500, 100) — kept as last resort only.
      *
      * @return array{suggested_start: int, db_max_id: int, gap: int}
      */
@@ -55,37 +60,69 @@ class HistoryScanner
         $config = Config::get();
         $token  = $config['telegram_bot_token'] ?? '';
 
-        // Highest ID in DB
+        // Highest ID already in DB
         $dbMaxId = (int) DB::fetchScalar(
             'SELECT MAX(telegram_message_id) FROM contents WHERE telegram_message_id IS NOT NULL'
         ) ?: 0;
 
-        // Determine starting point for scan
-        $currentId = max(1000, $dbMaxId + 500); // fallback
+        // Safe fallback (last resort — only for completely empty installs)
+        $currentId = max(100, $dbMaxId + 500);
 
-        if (!empty($token)) {
-            // First attempt: getWebhookInfo to see the latest received update
-            $whInfo = self::apiRequest($token, 'getWebhookInfo', []);
-            $lastErrMsg = $whInfo['result']['last_error_message'] ?? '';
-            // Doesn't give the ID directly, but try getUpdates with high offset
-            
-            // Second attempt: getUpdates with offset=-1
-            $resp = self::apiRequest($token, 'getUpdates', [
-                'limit'           => 1,
-                'offset'          => -1,
-                'allowed_updates' => ['channel_post', 'edited_channel_post'],
+        if (empty($token)) {
+            return [
+                'suggested_start' => $currentId,
+                'db_max_id'       => $dbMaxId,
+                'gap'             => max(0, $currentId - $dbMaxId),
+            ];
+        }
+
+        // ── Attempt 1: getUpdates without touching the webhook ───────────────
+        $msgId = self::getLatestMsgIdViaUpdates($token);
+
+        // ── Attempt 2: webhook was active (409) → detach, probe, re-attach ──
+        if ($msgId === 0) {
+            Logger::scanner(Logger::INFO, 'getStartId: getUpdates blocked (webhook active) — detaching temporarily');
+
+            // Save current webhook config so we can restore it
+            $whInfo     = self::apiRequest($token, 'getWebhookInfo', []);
+            $whUrl      = $whInfo['result']['url']            ?? '';
+            $whSecret   = $config['webhook_secret']           ?? '';
+            $whMaxConn  = $whInfo['result']['max_connections'] ?? 40;
+
+            // Detach
+            self::apiRequest($token, 'deleteWebhook', ['drop_pending_updates' => false]);
+
+            // Probe
+            $msgId = self::getLatestMsgIdViaUpdates($token);
+
+            // Re-attach immediately (mirror of actionSyncTelegram logic)
+            if (!empty($whUrl) && !empty($whSecret)) {
+                self::apiRequest($token, 'setWebhook', [
+                    'url'             => $whUrl,
+                    'secret_token'    => $whSecret,
+                    'max_connections' => $whMaxConn,
+                    'allowed_updates' => ['channel_post', 'edited_channel_post'],
+                ]);
+                Logger::scanner(Logger::INFO, 'getStartId: webhook re-attached', ['url' => $whUrl]);
+            } else {
+                Logger::scanner(Logger::WARNING, 'getStartId: webhook not re-attached (url or secret missing)');
+            }
+        }
+
+        // Use the probed message ID if it looks reasonable
+        if ($msgId > 0) {
+            // Add a small margin so we don't miss the very last message
+            $currentId = $msgId + 10;
+            Logger::scanner(Logger::INFO, 'getStartId resolved via getUpdates', [
+                'msg_id'     => $msgId,
+                'start_from' => $currentId,
             ]);
-            $msgId = $resp['result'][0]['channel_post']['message_id']
-                  ?? $resp['result'][0]['edited_channel_post']['message_id']
-                  ?? 0;
-            if ($msgId > $dbMaxId) {
-                $currentId = $msgId + 10;
-            }
-
-            // Third attempt: if getUpdates does not help, use a wide margin
-            if ($currentId <= $dbMaxId + 10 && $dbMaxId > 0) {
-                $currentId = $dbMaxId + 2000;
-            }
+        } else {
+            // Complete fallback — no updates available at all
+            Logger::scanner(Logger::WARNING, 'getStartId: could not determine latest ID — using fallback', [
+                'fallback' => $currentId,
+                'db_max'   => $dbMaxId,
+            ]);
         }
 
         return [
@@ -93,6 +130,30 @@ class HistoryScanner
             'db_max_id'       => $dbMaxId,
             'gap'             => max(0, $currentId - $dbMaxId),
         ];
+    }
+
+    /**
+     * Calls getUpdates with offset=-1 and returns the latest channel_post
+     * message_id, or 0 if unavailable / blocked.
+     */
+    private static function getLatestMsgIdViaUpdates(string $token): int
+    {
+        $resp = self::apiRequest($token, 'getUpdates', [
+            'limit'           => 1,
+            'offset'          => -1,
+            'allowed_updates' => ['channel_post', 'edited_channel_post'],
+        ]);
+
+        // 409 = webhook conflict
+        if (!($resp['ok'] ?? false)) {
+            return 0;
+        }
+
+        return (int) (
+            $resp['result'][0]['channel_post']['message_id']
+            ?? $resp['result'][0]['edited_channel_post']['message_id']
+            ?? 0
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -133,25 +194,36 @@ class HistoryScanner
         $currentId = $startId;
         $messages  = [];
 
-        $maxAttempts = min(self::MAX_ATTEMPTS, $batchSize * 6);
+        // maxAttempts must cover the full ID range being scanned, not just
+        // batchSize * 6.  On a sparse channel (e.g. 3 messages spread over
+        // 500 IDs) the old formula gave 300 attempts, stopping before ID 5.
+        // We now use the full range (startId - 1) capped at MAX_ATTEMPTS so
+        // we never loop forever on a genuinely empty range.
+        $maxAttempts = min(self::MAX_ATTEMPTS, max($batchSize * 6, $startId - 1));
+
+        // Track actual Telegram API calls (forwardMessage) for rate-limiting.
+        // Sleeping on every N *attempts* wastes time on non-existent IDs that
+        // never touch the API.  We sleep only after real API calls instead.
+        $apiCalls = 0;
 
         while ($imported < $batchSize && $attempts < $maxAttempts && $currentId > 0) {
             $attempts++;
 
-            // Pausa anti-rate-limit
-            if ($attempts > 1 && $attempts % self::SLEEP_EVERY === 0) {
-                usleep(self::SLEEP_MS);
-            }
-
-            // Skip if already in DB
+            // Skip if already in DB (no API call needed)
             if (self::existsInDb((int) $currentId)) {
                 $skipped++;
                 $currentId--;
                 continue;
             }
 
-            // Retrieve the message via forwardMessage
+            // Retrieve the message via forwardMessage (real API call)
             $post = self::fetchMessageViaForward($token, $chatId, (int) $currentId);
+            $apiCalls++;
+
+            // Anti-rate-limit pause — only counts real API calls
+            if ($apiCalls > 1 && $apiCalls % self::SLEEP_EVERY === 0) {
+                usleep(self::SLEEP_MS);
+            }
 
             if ($post === null) {
                 // Message not found (deleted or non-existent ID) — skip
@@ -187,7 +259,11 @@ class HistoryScanner
             $currentId--;
         }
 
-        $hasMore = $currentId > 0 && $imported >= $batchSize;
+        // has_more = true as long as there are IDs left to scan.
+        // Do NOT gate on $imported >= $batchSize: a channel with few messages
+        // would always get has_more=false after the first batch even when
+        // currentId is still well above 0, causing the UI to stop too early.
+        $hasMore = $currentId > 0;
 
         Logger::scanner(Logger::INFO, 'Batch completato', [
             'start'     => $startId,

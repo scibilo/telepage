@@ -157,6 +157,13 @@ async function startScan() {
         currentStartId = res.next_start_id;
         document.getElementById('progress-bar').style.width = '100%';
 
+        // Run AI queue as a separate async call so it doesn't race against
+        // the scan's set_time_limit. Do this before deciding has_more so the
+        // user sees tags appear immediately after each batch.
+        if (res.ai_pending > 0) {
+            await runAiQueueAfterScan(res.ai_pending);
+        }
+
         if (!res.has_more || currentStartId <= 0) {
             log('🎉 Scan complete. No more messages to retrieve.', 'ok');
             setStatus('Complete.');
@@ -174,6 +181,37 @@ async function startScan() {
         isScanning = false;
         document.getElementById('btn-start').disabled = false;
         document.getElementById('progress-bar').style.width = '0%';
+    }
+}
+
+// ── AI queue loop (runs after each scan batch, separate HTTP calls) ───────
+async function runAiQueueAfterScan(initialPending) {
+    log(`🤖 AI tagging ${initialPending} pending content…`, 'info');
+    let iterations = 0;
+    const maxIter  = 20; // safety cap
+
+    while (iterations < maxIter) {
+        iterations++;
+        try {
+            const res = await apiFetch('process_ai_queue', {}, 'POST');
+            if (!res.ok && res.error) { log('⚠️ AI error: ' + res.error, 'warn'); break; }
+            const d = res;
+            if (d.processed > 0) {
+                log(`🤖 AI batch ${iterations}: ${d.processed} tagged, ${d.remaining} remaining`, 'ok');
+            }
+            if (d.status === 'done' || d.remaining === 0) {
+                log('✅ AI tagging complete.', 'ok');
+                break;
+            }
+            if (d.processed === 0 && d.remaining > 0) {
+                log('⚠️ AI: no progress, some contents may have errors.', 'warn');
+                break;
+            }
+            await new Promise(r => setTimeout(r, 500));
+        } catch (e) {
+            log('⚠️ AI queue error: ' + e.message, 'warn');
+            break;
+        }
     }
 }
 

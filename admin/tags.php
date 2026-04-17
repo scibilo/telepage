@@ -73,9 +73,15 @@ adminHeader('Tags', 'tags');
 <script>
 async function loadTags() {
     try {
-        const res  = await fetch('../api/admin.php?action=tags_list');
-        const json = await res.json();
-        const tags = json.data || json;
+        const res = await tpApi('tags_list');
+        if (!res.ok) {
+            console.error('Failed to load tags:', res.error);
+            document.getElementById('tags-body').innerHTML =
+                '<tr><td colspan="6" style="text-align:center; padding:40px; color:var(--error);">Error loading tags: '
+                + escapeHtml(res.error || 'unknown') + '</td></tr>';
+            return;
+        }
+        const tags = res.data || [];
         const body = document.getElementById('tags-body');
         body.innerHTML = '';
 
@@ -136,14 +142,19 @@ function closeTagModal() {
     document.getElementById('tag-modal').style.display = 'none';
 }
 
-function deleteTag(id) {
+async function deleteTag(id) {
     if (!confirm('Are you sure you want to delete this tag? It will be removed from all contents.')) return;
-    
-    fetch('../api/admin.php?action=delete_tag', {
+
+    const res = await tpApi('delete_tag', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'id=' + id
-    }).then(() => loadTags());
+        body: { id: id }
+    });
+
+    if (!res.ok) {
+        alert('Error: ' + res.error);
+        return;
+    }
+    loadTags();
 }
 
 document.getElementById('tag-form').onsubmit = async (e) => {
@@ -156,19 +167,17 @@ document.getElementById('tag-form').onsubmit = async (e) => {
         source: document.getElementById('tag-source').value
     };
 
-    const res = await fetch('../api/admin.php?action=save_tag', {
+    const res = await tpApi('save_tag', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: data
     });
 
-    if (res.ok) {
-        closeTagModal();
-        loadTags();
-    } else {
-        const err = await res.json();
-        alert('Error: ' + err.error);
+    if (!res.ok) {
+        alert('Error: ' + res.error);
+        return;
     }
+    closeTagModal();
+    loadTags();
 };
 
 function escapeHtml(text) {

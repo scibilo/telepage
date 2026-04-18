@@ -13,22 +13,15 @@ declare(strict_types=1);
 
 define('TELEPAGE_ROOT', dirname(__DIR__));
 
+require_once TELEPAGE_ROOT . '/app/bootstrap.php';
+Bootstrap::init(Bootstrap::MODE_JSON);
+
 require_once TELEPAGE_ROOT . '/app/Config.php';
 require_once TELEPAGE_ROOT . '/app/DB.php';
 require_once TELEPAGE_ROOT . '/app/Logger.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 header('Access-Control-Allow-Origin: *'); // Public API
-
-// Catch globale: qualsiasi errore PHP restituisce JSON invece di HTML
-set_exception_handler(function(Throwable $e) {
-    http_response_code(500);
-    echo json_encode(['ok' => false, 'error' => 'Server error: ' . $e->getMessage(), 'file' => basename($e->getFile()), 'line' => $e->getLine()]);
-    exit;
-});
-set_error_handler(function($severity, $message, $file, $line) {
-    throw new ErrorException($message, 0, $severity, $file, $line);
-});
 
 // -----------------------------------------------------------------------
 // Rate limiting: 60 req/min per IP

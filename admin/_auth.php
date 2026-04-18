@@ -9,6 +9,9 @@ if (!defined('TELEPAGE_ROOT')) {
     define('TELEPAGE_ROOT', dirname(__DIR__));
 }
 
+require_once TELEPAGE_ROOT . '/app/bootstrap.php';
+Bootstrap::init(Bootstrap::MODE_HTML);
+
 require_once TELEPAGE_ROOT . '/app/Config.php';
 require_once TELEPAGE_ROOT . '/app/DB.php';
 require_once TELEPAGE_ROOT . '/app/Logger.php';

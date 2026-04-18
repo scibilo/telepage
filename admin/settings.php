@@ -97,7 +97,8 @@ adminHeader('Settings', 'settings');
                 <label class="form-label">Custom Webhook URL (Optional)</label>
                 <?php
                 // Pre-fill with detected URL if not yet saved
-                $detectedUrl = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'])), '/');
+                $is_https    = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+                $detectedUrl = ($is_https ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'])), '/');
                 $webhookUrlValue = $config['custom_webhook_url'] ?? $detectedUrl;
                 ?>
                 <input type="text" name="custom_webhook_url" class="form-control" value="<?= e($webhookUrlValue) ?>" placeholder="https://yourdomain.com/telepage">

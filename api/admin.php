@@ -17,6 +17,7 @@ define('TELEPAGE_ROOT', dirname(__DIR__));
 require_once TELEPAGE_ROOT . '/app/Config.php';
 require_once TELEPAGE_ROOT . '/app/DB.php';
 require_once TELEPAGE_ROOT . '/app/Logger.php';
+require_once TELEPAGE_ROOT . '/app/Security/CsrfGuard.php';
 require_once TELEPAGE_ROOT . '/app/TelegramBot.php';
 require_once TELEPAGE_ROOT . '/app/Scraper.php';
 
@@ -39,6 +40,10 @@ if (!empty($_SESSION['login_time']) && (time() - $_SESSION['login_time']) > 2880
     session_destroy();
     jsonError(401, 'Session expired');
 }
+
+// CSRF: reject any write request without a valid X-CSRF-Token header.
+// GET/HEAD pass through untouched (handled inside verifyForWrite).
+CsrfGuard::verifyForWrite();
 
 // Rate limiting admin: 120 req/min (admin operations like bulk delete need headroom)
 $ip = clientIp();

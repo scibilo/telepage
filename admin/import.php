@@ -105,7 +105,6 @@ let importPollTimer = null;
 
 const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('json-file-input');
-const API = '../api/admin.php';
 
 // Drag & drop
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = 'var(--accent)'; });
@@ -173,28 +172,24 @@ async function startImport() {
     formData.append('date_to', dateTo);
 
     log('🚀 Starting import...');
-    try {
-        const res = await fetch(API + '?action=import_json', { method: 'POST', body: formData });
-        const data = await res.json();
-        if (data.ok) {
-            log(`Import started: ${data.data.total_found} messages in period — ${data.data.total_imported} imported so far`, 'ok');
-            startPolling();
-        } else {
-            log('❌ ' + data.error, 'err');
-            document.getElementById('btn-start-import').disabled = false;
-        }
-    } catch(e) {
-        log('❌ Error: ' + e.message, 'err');
+    const res = await tpApi('import_json', {
+        method: 'POST',
+        formData: formData
+    });
+    if (res.ok) {
+        log(`Import started: ${res.data.total_found} messages in period — ${res.data.total_imported} imported so far`, 'ok');
+        startPolling();
+    } else {
+        log('❌ ' + res.error, 'err');
         document.getElementById('btn-start-import').disabled = false;
     }
 }
 
 function startPolling() {
     importPollTimer = setInterval(async () => {
-        const res = await fetch(API + '?action=import_status');
-        const data = await res.json();
-        if (!data.ok) return;
-        const s = data.data;
+        const res = await tpApi('import_status');
+        if (!res.ok) return;
+        const s = res.data;
 
         document.getElementById('prog-label').textContent = `${s.imported} / ${s.total} imported`;
         document.getElementById('prog-pct').textContent   = s.progress + '%';
@@ -210,14 +205,12 @@ function startPolling() {
 
 async function syncTelegram() {
     log('⏳ Telegram sync started...');
-    try {
-        const res = await fetch(API + '?action=sync_telegram', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
-        const data = await res.json();
-        if (data.ok) log(`✅ Sync complete: ${data.data.processed} messages processed`, 'ok');
-        else log('❌ ' + data.error, 'err');
-    } catch(e) {
-        log('❌ ' + e.message, 'err');
-    }
+    const res = await tpApi('sync_telegram', {
+        method: 'POST',
+        body: {}
+    });
+    if (res.ok) log(`✅ Sync complete: ${res.data.processed} messages processed`, 'ok');
+    else log('❌ ' + res.error, 'err');
 }
 
 function log(msg, type='info') {

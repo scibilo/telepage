@@ -57,6 +57,7 @@ function adminHeader(string $pageTitle, string $activePage = ''): void {
     $themeColor = e($GLOBALS['theme_color']);
     $adminUser  = e($GLOBALS['admin_user']);
     $csrf       = e($GLOBALS['csrf_token']);
+    $apiJsVer   = @filemtime(TELEPAGE_ROOT . '/assets/js/api.js') ?: time();
     echo <<<HTML
 <!DOCTYPE html>
 <html lang="en">
@@ -135,6 +136,7 @@ function adminHeader(string $pageTitle, string $activePage = ''): void {
     }
     </style>
     <meta name="csrf" content="{$csrf}">
+    <script src="../assets/js/api.js?v={$apiJsVer}"></script>
 </head>
 <body>
 <aside class="sidebar">

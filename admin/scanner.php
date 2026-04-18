@@ -91,9 +91,6 @@ adminHeader('History Scanner', 'import');
 </div>
 
 <script>
-const API  = '../api/admin.php';
-const CSRF = document.querySelector('meta[name=csrf]').content;
-
 let currentStartId  = null;
 let totalImported   = 0;
 let totalSkipped    = 0;
@@ -283,20 +280,16 @@ function setStatus(txt) {
 }
 
 // ── API fetch helper ──────────────────────────────────────────────────────
+// Thin wrapper over tpApi that preserves the original calling convention:
+//   apiFetch(action)          → GET
+//   apiFetch(action, body)    → POST with JSON body
+// Throws on {ok:false} so callers can keep using try/catch.
 async function apiFetch(action, body = null) {
-    const url = API + '?action=' + action;
-    const opts = {
-        method:  body ? 'POST' : 'GET',
-        headers: { 'X-CSRF-Token': CSRF },
-    };
-    if (body) {
-        opts.headers['Content-Type'] = 'application/json';
-        opts.body = JSON.stringify(body);
-    }
-    const res  = await fetch(url, opts);
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error || 'API error');
-    return data.data;
+    const res = body
+        ? await tpApi(action, { method: 'POST', body: body })
+        : await tpApi(action);
+    if (!res.ok) throw new Error(res.error || 'API error');
+    return res.data;
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────

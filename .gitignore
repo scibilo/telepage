@@ -11,6 +11,11 @@ data/backups/*.sqlite
 assets/media/*
 !assets/media/.gitkeep
 
+# User-uploaded logo and generated favicons (per-installation)
+assets/img/logo.png
+assets/img/favicon-32.png
+assets/img/favicon-64.png
+
 # Logs
 data/*.log
 data/logs/

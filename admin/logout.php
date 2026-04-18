@@ -3,6 +3,8 @@
  * TELEPAGE — admin/logout.php
  */
 define('TELEPAGE_ROOT', dirname(__DIR__));
+require_once TELEPAGE_ROOT . '/app/bootstrap.php';
+Bootstrap::init(Bootstrap::MODE_HTML);
 require_once TELEPAGE_ROOT . '/app/Logger.php';
 
 session_name('tp_' . substr(hash('sha256', TELEPAGE_ROOT), 0, 16));

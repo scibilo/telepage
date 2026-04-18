@@ -9,6 +9,9 @@ declare(strict_types=1);
 
 define('TELEPAGE_ROOT', __DIR__);
 
+require_once TELEPAGE_ROOT . '/app/bootstrap.php';
+Bootstrap::init(Bootstrap::MODE_HTML);
+
 // Cache e sessione PRIMA di qualsiasi output
 ini_set('session.cookie_httponly', '1');
 ini_set('session.cookie_samesite', 'Strict');

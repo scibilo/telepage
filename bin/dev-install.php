@@ -63,7 +63,7 @@ $config = [
     'ai_auto_summary'     => false,
     'items_per_page'      => 12,
     'pagination_type'     => 'classic',
-    'custom_webhook_url'  => 'http://localhost:8000',
+    'custom_webhook_url'  => '',
     'download_media'      => false,  // No real token = no downloads anyway
 ];
 
@@ -164,18 +164,26 @@ echo "    http://localhost/~yourname/telepage/admin/login.php\n";
 echo "\n";
 echo "-- IMPORTANT (Apache / nginx only) --------------------------------\n";
 echo "\n";
-echo "The SQLite DB and data/ directory were just created by YOUR user.\n";
-echo "Apache and nginx run as a different user (typically www-data),\n";
-echo "which means they can READ the DB but cannot WRITE to it.\n";
-echo "POST endpoints (save, delete, restore, ...) will silently fail\n";
-echo "with 'attempt to write a readonly database'.\n";
+echo "The SQLite DB, data/ directory AND config.json were just created\n";
+echo "by YOUR user. Apache and nginx run as a different user (typically\n";
+echo "www-data), which means they can READ these files but cannot WRITE\n";
+echo "to them. POST endpoints will silently fail with errors like:\n";
+echo "  - 'attempt to write a readonly database' (data/app.sqlite)\n";
+echo "  - 'cannot write config.json.tmp.XXXX'     (config.json updates)\n";
 echo "\n";
-echo "To fix, hand ownership of data/ to the web server user:\n";
-echo "    sudo chown -R www-data:www-data " . TELEPAGE_ROOT . "/data/\n";
+echo "Two common fixes:\n";
 echo "\n";
-echo "After that, running this installer again will require sudo, or\n";
-echo "you can temporarily chown data/ back to your user first:\n";
-echo "    sudo chown -R \$(whoami):\$(whoami) " . TELEPAGE_ROOT . "/data/\n";
+echo "  (A) Narrow fix — chown just the writable locations:\n";
+echo "      sudo chown -R www-data:www-data " . TELEPAGE_ROOT . "/data/\n";
+echo "      sudo chown www-data:www-data " . TELEPAGE_ROOT . "/config.json\n";
+echo "      (note: you then need sudo to re-run dev-install.php)\n";
+echo "\n";
+echo "  (B) Group fix — add yourself to www-data and chmod g+rwX:\n";
+echo "      sudo usermod -aG www-data \$(whoami)\n";
+echo "      sudo chgrp -R www-data " . TELEPAGE_ROOT . "\n";
+echo "      sudo chmod -R g+rwX " . TELEPAGE_ROOT . "\n";
+echo "      sudo find " . TELEPAGE_ROOT . " -type d -exec chmod g+s {} \\;\n";
+echo "      # then log out and log back in for the group to activate\n";
 echo "\n";
 echo "(If you use the PHP built-in server, none of this applies: it\n";
 echo "runs as your own user and can read/write everywhere you can.)\n";

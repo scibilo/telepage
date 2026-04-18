@@ -133,9 +133,6 @@ adminHeader('Dashboard', 'dashboard');
 <?php adminFooter(); ?>
 
 <script>
-const API = '../api/admin.php';
-const CSRF = document.querySelector('meta[name=csrf]').content;
-
 function log(msg, type = 'info') {
     const c = document.getElementById('console');
     const t = new Date().toLocaleTimeString('en-GB', {hour12: false});
@@ -156,17 +153,14 @@ async function adminAction(action, extra = {}) {
     if (btn) btn.disabled = true;
 
     try {
-        const body = JSON.stringify({ action, ...extra });
-        const res = await fetch(API + '?action=' + action, {
+        const res = await tpApi(action, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
-            body
+            body: { action, ...extra }
         });
-        const data = await res.json();
-        if (data.ok) {
-            log(JSON.stringify(data.data, null, 0), 'ok');
+        if (res.ok) {
+            log(JSON.stringify(res.data, null, 0), 'ok');
         } else {
-            log('Error: ' + data.error, 'err');
+            log('Error: ' + res.error, 'err');
         }
     } catch(e) {
         log('Network error: ' + e.message, 'err');
@@ -177,20 +171,19 @@ async function adminAction(action, extra = {}) {
 
 async function checkAiModels() {
     log('Checking available AI models...', 'info');
-    try {
-        const res = await fetch(API + '?action=list_ai_models', {headers: {'X-CSRF-Token': CSRF}});
-        const data = await res.json();
-        if (data.ok) {
-            for (const [ver, info] of Object.entries(data.data)) {
-                const models = info.models_supporting_generateContent;
-                if (models.length > 0) {
-                    log(ver + ': ' + models.join(', '), 'ok');
-                } else {
-                    log(ver + ': HTTP ' + info.http_code + ' — ' + (info.error || 'no models found'), 'err');
-                }
-            }
+    const res = await tpApi('list_ai_models');
+    if (!res.ok) {
+        log('Error: ' + res.error, 'err');
+        return;
+    }
+    for (const [ver, info] of Object.entries(res.data)) {
+        const models = info.models_supporting_generateContent;
+        if (models.length > 0) {
+            log(ver + ': ' + models.join(', '), 'ok');
+        } else {
+            log(ver + ': HTTP ' + info.http_code + ' — ' + (info.error || 'no models found'), 'err');
         }
-    } catch(e) { log('Errore: ' + e.message, 'err'); }
+    }
 }
 
 async function processAiAll() {
@@ -204,32 +197,25 @@ async function processAiAll() {
 
     while (iteration < maxIterations) {
         iteration++;
-        try {
-            const res = await fetch(API + '?action=process_ai_queue', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
-                body: '{}'
-            });
-            const data = await res.json();
-            if (!data.ok) { log('Error: ' + data.error, 'err'); break; }
+        const res = await tpApi('process_ai_queue', {
+            method: 'POST',
+            body: {}
+        });
+        if (!res.ok) { log('Error: ' + res.error, 'err'); break; }
 
-            const d = data.data;
-            log(`Batch ${iteration}: ${d.processed} processed, ${d.remaining} remaining`, d.processed > 0 ? 'ok' : 'info');
+        const d = res.data;
+        log(`Batch ${iteration}: ${d.processed} processed, ${d.remaining} remaining`, d.processed > 0 ? 'ok' : 'info');
 
-            if (d.status === 'done' || d.remaining === 0) {
-                log('✅ AI processing complete!', 'ok');
-                break;
-            }
-            if (d.processed === 0 && d.remaining > 0) {
-                log('⚠️ No progress — some contents may have errors.', 'warn');
-                break;
-            }
-
-            await new Promise(r => setTimeout(r, 1000)); // 1s between batches
-        } catch(e) {
-            log('Network error: ' + e.message, 'err');
+        if (d.status === 'done' || d.remaining === 0) {
+            log('✅ AI processing complete!', 'ok');
             break;
         }
+        if (d.processed === 0 && d.remaining > 0) {
+            log('⚠️ No progress — some contents may have errors.', 'warn');
+            break;
+        }
+
+        await new Promise(r => setTimeout(r, 1000)); // 1s between batches
     }
 
     btn.disabled = false;
@@ -239,32 +225,30 @@ async function processAiAll() {
 async function confirmRequeueAi() {
     if (!confirm('Re-queue ALL contents for AI processing? Useful after enabling the AI API key.')) return;
     log('🔄 Re-queuing for AI...', 'warn');
-    try {
-        const res = await fetch(API + '?action=requeue_ai', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
-            body: '{}'
-        });
-        const data = await res.json();
-        if (data.ok) {
-            log(`✅ ${data.data.requeued} contents queued for AI. Now use "Process AI" to process them.`, 'ok');
-        } else log('Error: ' + data.error, 'err');
-    } catch(e) { log('Errore: ' + e.message, 'err'); }
+    const res = await tpApi('requeue_ai', {
+        method: 'POST',
+        body: {}
+    });
+    if (res.ok) {
+        log(`✅ ${res.data.requeued} contents queued for AI. Now use "Process AI" to process them.`, 'ok');
+    } else {
+        log('Error: ' + res.error, 'err');
+    }
 }
 
 async function confirmReset() {
     const conf = prompt('Type RESET to confirm destruction of all data:');
     if (conf !== 'RESET') { log('Reset cancelled.', 'warn'); return; }
     log('⚠️ RESETTING DATABASE...', 'warn');
-    try {
-        const res = await fetch(API + '?action=reset_database', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ confirm: 'RESET' })
-        });
-        const data = await res.json();
-        if (data.ok) { log('Database reset.', 'ok'); location.reload(); }
-        else log('Error: ' + data.error, 'err');
-    } catch(e) { log('Errore: ' + e.message, 'err'); }
+    const res = await tpApi('reset_database', {
+        method: 'POST',
+        body: { confirm: 'RESET' }
+    });
+    if (res.ok) {
+        log('Database reset.', 'ok');
+        location.reload();
+    } else {
+        log('Error: ' + res.error, 'err');
+    }
 }
 </script>

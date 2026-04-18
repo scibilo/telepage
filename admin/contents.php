@@ -76,55 +76,63 @@ let allTags = [];
 let searchTimer = null;
 
 async function loadTagsData() {
-    const res  = await fetch('../api/admin.php?action=tags_list');
-    const json = await res.json();
-    allTags = json.data || json;
+    const res = await tpApi('tags_list');
+    if (!res.ok) {
+        console.error('Failed to load tags:', res.error);
+        allTags = [];
+        return;
+    }
+    allTags = res.data || [];
 }
 
 async function loadContents(page = 1) {
     currentPage = page;
     const q = document.getElementById('admin-search').value;
-    try {
-        const res = await fetch(`../api/admin.php?action=contents_list&page=${page}&q=${encodeURIComponent(q)}`);
-        const json = await res.json();
-        const data = json.data || json; // supports both {ok,data:{...}} and direct response
-        const body = document.getElementById('contents-body');
-        body.innerHTML = '';
+    const res = await tpApi('contents_list', {
+        query: { page: page, q: q }
+    });
 
-        if (!data.items || data.items.length === 0) {
-            body.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:40px;">No contents found.</td></tr>';
-            return;
-        }
+    const body = document.getElementById('contents-body');
+    body.innerHTML = '';
 
-        data.items.forEach(item => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>
-                    <div style="font-weight:600; margin-bottom:4px;">${escapeHtml(item.title || '(Post Telegram)')}</div>
-                    <a href="${item.url}" target="_blank" style="font-size:12px; color:var(--accent); text-decoration:none;">View source ↗</a>
-                </td>
-                <td><span class="badge badge-info">${item.content_type.toUpperCase()}</span></td>
-                <td style="font-size:12px; color:var(--text-muted)">${new Date(item.created_at).toLocaleDateString()}</td>
-                <td>
-                    <span class="badge ${item.is_deleted ? 'badge-danger' : 'badge-success'}">
-                        ${item.is_deleted ? 'DELETED' : 'ACTIVE'}
-                    </span>
-                </td>
-                <td style="text-align: right; white-space:nowrap;">
-                    <button class="btn btn-outline" style="padding:4px 8px; font-size:12px;" onclick="openEditModal(${item.id})">Edit</button>
-                    ${item.is_deleted ? 
-                        `<button class="btn btn-outline" style="padding:4px 8px; font-size:12px;" onclick="restoreItem(${item.id})">Restore</button>` :
-                        `<button class="btn btn-outline" style="padding:4px 8px; font-size:12px; color:var(--error);" onclick="deleteItem(${item.id})">Delete</button>`
-                    }
-                </td>
-            `;
-            body.appendChild(tr);
-        });
-
-        renderPagination(data.pages || 1);
-    } catch (e) {
-        console.error(e);
+    if (!res.ok) {
+        body.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:40px; color:var(--error);">Error loading contents: '
+            + escapeHtml(res.error || 'unknown') + '</td></tr>';
+        return;
     }
+
+    const data = res.data || {};
+    if (!data.items || data.items.length === 0) {
+        body.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:40px;">No contents found.</td></tr>';
+        return;
+    }
+
+    data.items.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>
+                <div style="font-weight:600; margin-bottom:4px;">${escapeHtml(item.title || '(Post Telegram)')}</div>
+                <a href="${item.url}" target="_blank" style="font-size:12px; color:var(--accent); text-decoration:none;">View source ↗</a>
+            </td>
+            <td><span class="badge badge-info">${item.content_type.toUpperCase()}</span></td>
+            <td style="font-size:12px; color:var(--text-muted)">${new Date(item.created_at).toLocaleDateString()}</td>
+            <td>
+                <span class="badge ${item.is_deleted ? 'badge-danger' : 'badge-success'}">
+                    ${item.is_deleted ? 'DELETED' : 'ACTIVE'}
+                </span>
+            </td>
+            <td style="text-align: right; white-space:nowrap;">
+                <button class="btn btn-outline" style="padding:4px 8px; font-size:12px;" onclick="openEditModal(${item.id})">Edit</button>
+                ${item.is_deleted ?
+                    `<button class="btn btn-outline" style="padding:4px 8px; font-size:12px;" onclick="restoreItem(${item.id})">Restore</button>` :
+                    `<button class="btn btn-outline" style="padding:4px 8px; font-size:12px; color:var(--error);" onclick="deleteItem(${item.id})">Delete</button>`
+                }
+            </td>
+        `;
+        body.appendChild(tr);
+    });
+
+    renderPagination(data.pages || 1);
 }
 
 function renderPagination(totalPages) {
@@ -142,37 +150,38 @@ function renderPagination(totalPages) {
 }
 
 async function openEditModal(id) {
-    try {
-        const res  = await fetch(`../api/admin.php?action=get_content&id=${id}`);
-        const json = await res.json();
-        const content = json.data || json;
-        
-        document.getElementById('edit-id').value = content.id;
-        document.getElementById('edit-title').value = content.title || '';
-        document.getElementById('edit-description').value = content.ai_summary || content.description || '';
-        
-        const selector = document.getElementById('tags-selector');
-        selector.innerHTML = '';
-        
-        const selectedIds = (content.tags || []).map(t => t.id);
-        
-        allTags.forEach(tag => {
-            const label = document.createElement('label');
-            label.style.cssText = `display:flex; align-items:center; gap:8px; padding:6px 10px; background:var(--surface); border-radius:6px; cursor:pointer; border:1px solid ${selectedIds.includes(tag.id) ? 'var(--accent)' : 'var(--border)'};`;
-            
-            const isChecked = selectedIds.includes(tag.id);
-            label.innerHTML = `
-                <input type="checkbox" name="tags[]" value="${tag.id}" ${isChecked ? 'checked' : ''} onchange="this.parentElement.style.borderColor = this.checked ? 'var(--accent)' : 'var(--border)'">
-                <span style="width:10px; height:10px; border-radius:2px; background:${tag.color}"></span>
-                <span style="font-size:13px;">${escapeHtml(tag.name)}</span>
-            `;
-            selector.appendChild(label);
-        });
-
-        document.getElementById('edit-modal').style.display = 'flex';
-    } catch (e) {
-        console.error(e);
+    const res = await tpApi('get_content', {
+        query: { id: id }
+    });
+    if (!res.ok) {
+        alert('Error loading content: ' + res.error);
+        return;
     }
+    const content = res.data || {};
+
+    document.getElementById('edit-id').value = content.id;
+    document.getElementById('edit-title').value = content.title || '';
+    document.getElementById('edit-description').value = content.ai_summary || content.description || '';
+
+    const selector = document.getElementById('tags-selector');
+    selector.innerHTML = '';
+
+    const selectedIds = (content.tags || []).map(t => t.id);
+
+    allTags.forEach(tag => {
+        const label = document.createElement('label');
+        label.style.cssText = `display:flex; align-items:center; gap:8px; padding:6px 10px; background:var(--surface); border-radius:6px; cursor:pointer; border:1px solid ${selectedIds.includes(tag.id) ? 'var(--accent)' : 'var(--border)'};`;
+
+        const isChecked = selectedIds.includes(tag.id);
+        label.innerHTML = `
+            <input type="checkbox" name="tags[]" value="${tag.id}" ${isChecked ? 'checked' : ''} onchange="this.parentElement.style.borderColor = this.checked ? 'var(--accent)' : 'var(--border)'">
+            <span style="width:10px; height:10px; border-radius:2px; background:${tag.color}"></span>
+            <span style="font-size:13px;">${escapeHtml(tag.name)}</span>
+        `;
+        selector.appendChild(label);
+    });
+
+    document.getElementById('edit-modal').style.display = 'flex';
 }
 
 function closeEditModal() {
@@ -183,7 +192,7 @@ document.getElementById('edit-form').onsubmit = async (e) => {
     e.preventDefault();
     const id = document.getElementById('edit-id').value;
     const selectedTags = Array.from(document.querySelectorAll('input[name="tags[]"]:checked')).map(cb => cb.value);
-    
+
     const data = {
         id: parseInt(id),
         title: document.getElementById('edit-title').value,
@@ -191,35 +200,42 @@ document.getElementById('edit-form').onsubmit = async (e) => {
         tags: selectedTags
     };
 
-    const res = await fetch('../api/admin.php?action=save_content', {
+    const res = await tpApi('save_content', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: data
     });
 
-    if (res.ok) {
-        closeEditModal();
-        loadContents(currentPage);
-    } else {
-        alert('Error while saving.');
+    if (!res.ok) {
+        alert('Error while saving: ' + res.error);
+        return;
     }
+    closeEditModal();
+    loadContents(currentPage);
 };
 
-function deleteItem(id) {
+async function deleteItem(id) {
     if (!confirm('Move this content to trash?')) return;
-    fetch('../api/admin.php?action=delete_content', {
+    const res = await tpApi('delete_content', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'id=' + id
-    }).then(() => loadContents(currentPage));
+        body: { id: id }
+    });
+    if (!res.ok) {
+        alert('Error: ' + res.error);
+        return;
+    }
+    loadContents(currentPage);
 }
 
-function restoreItem(id) {
-    fetch('../api/admin.php?action=restore_content', {
+async function restoreItem(id) {
+    const res = await tpApi('restore_content', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'id=' + id
-    }).then(() => loadContents(currentPage));
+        body: { id: id }
+    });
+    if (!res.ok) {
+        alert('Error: ' + res.error);
+        return;
+    }
+    loadContents(currentPage);
 }
 
 function debounceLoad() {

@@ -16,6 +16,7 @@
 
 require_once __DIR__ . '/Config.php';
 require_once __DIR__ . '/Logger.php';
+require_once __DIR__ . '/Security/UrlValidator.php';
 
 class Scraper
 {
@@ -256,45 +257,79 @@ class Scraper
 
     /**
      * Executes a cURL GET and returns the body.
-     * Returns null on error.
+     * Returns null on error or if SSRF validation fails.
+     *
+     * SSRF protection:
+     *  - UrlValidator::isSafeToFetch() called on the initial URL.
+     *  - CURLOPT_PROTOCOLS + CURLOPT_REDIR_PROTOCOLS restrict cURL to
+     *    http/https, so a malicious Location: file:/// is ignored.
+     *  - CURLOPT_FOLLOWLOCATION is DISABLED; we follow redirects
+     *    manually (max 5 hops) and re-validate each Location target
+     *    with UrlValidator. This blocks DNS-rebind and open-redirect
+     *    chains that would have tricked libcurl-native redirect.
      */
     private static function httpGet(string $url, string $userAgent): ?string
     {
-        $ch = curl_init();
-        curl_setopt_array($ch, [
-            CURLOPT_URL             => $url,
-            CURLOPT_RETURNTRANSFER  => true,
-            CURLOPT_FOLLOWLOCATION  => true,
-            CURLOPT_MAXREDIRS       => 5,
-            CURLOPT_CONNECTTIMEOUT  => self::TIMEOUT_CONNECT,
-            CURLOPT_TIMEOUT         => self::TIMEOUT_TOTAL,
-            CURLOPT_SSL_VERIFYPEER  => true,
-            CURLOPT_SSL_VERIFYHOST  => 2,
-            CURLOPT_USERAGENT       => $userAgent,
-            CURLOPT_HTTPHEADER      => [
-                'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language: it-IT,it;q=0.9,en;q=0.8',
-                'Accept-Encoding: gzip, deflate',
-            ],
-            CURLOPT_ENCODING        => '', // abilita decompressione automatica
-        ]);
+        $maxHops = 5;
 
-        $body = curl_exec($ch);
-        $errno = curl_errno($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        for ($hop = 0; $hop <= $maxHops; $hop++) {
+            $validation = UrlValidator::validate($url);
+            if (!$validation['ok']) {
+                Logger::scraper(Logger::WARNING, 'SSRF blocked: ' . $validation['reason'], [
+                    'url' => $url,
+                    'hop' => $hop,
+                ]);
+                return null;
+            }
 
-        if ($errno !== 0 || $body === false) {
-            Logger::scraper(Logger::WARNING, "cURL error fetching {$url}", ['errno' => $errno]);
-            return null;
+            $ch = curl_init();
+            curl_setopt_array($ch, [
+                CURLOPT_URL             => $url,
+                CURLOPT_RETURNTRANSFER  => true,
+                CURLOPT_FOLLOWLOCATION  => false,
+                CURLOPT_CONNECTTIMEOUT  => self::TIMEOUT_CONNECT,
+                CURLOPT_TIMEOUT         => self::TIMEOUT_TOTAL,
+                CURLOPT_SSL_VERIFYPEER  => true,
+                CURLOPT_SSL_VERIFYHOST  => 2,
+                CURLOPT_PROTOCOLS       => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+                CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+                CURLOPT_USERAGENT       => $userAgent,
+                CURLOPT_HTTPHEADER      => [
+                    'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language: it-IT,it;q=0.9,en;q=0.8',
+                    'Accept-Encoding: gzip, deflate',
+                ],
+                CURLOPT_ENCODING        => '', // abilita decompressione automatica
+            ]);
+
+            $body     = curl_exec($ch);
+            $errno    = curl_errno($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $location = curl_getinfo($ch, CURLINFO_REDIRECT_URL);
+            curl_close($ch);
+
+            if ($errno !== 0 || $body === false) {
+                Logger::scraper(Logger::WARNING, "cURL error fetching {$url}", ['errno' => $errno]);
+                return null;
+            }
+
+            // Follow redirects manually — re-validate each target.
+            if ($httpCode >= 300 && $httpCode < 400 && !empty($location)) {
+                // Resolve relative Location against the current URL.
+                $url = self::absoluteUrl($location, $url);
+                continue;
+            }
+
+            if ($httpCode >= 400) {
+                Logger::scraper(Logger::WARNING, "HTTP {$httpCode} for {$url}");
+                return null;
+            }
+
+            return $body;
         }
 
-        if ($httpCode >= 400) {
-            Logger::scraper(Logger::WARNING, "HTTP {$httpCode} for {$url}");
-            return null;
-        }
-
-        return $body;
+        Logger::scraper(Logger::WARNING, 'Too many redirects', ['final_url' => $url]);
+        return null;
     }
 
     // -----------------------------------------------------------------------
@@ -375,9 +410,21 @@ class Scraper
     private static function normalizeUrl(string $url): string
     {
         $url = trim($url);
-        if (!empty($url) && !str_starts_with($url, 'http')) {
-            $url = 'https://' . $url;
+        if ($url === '') {
+            return '';
         }
+
+        // If the URL already declares a scheme, keep it. Invalid schemes
+        // (file://, gopher://, javascript:, ...) will be rejected later
+        // by UrlValidator — we must NOT silently rewrite them to https://
+        // because doing so would turn 'file:///etc/passwd' into
+        // 'https://file:///etc/passwd' and obscure the real scheme.
+        if (preg_match('#^[a-z][a-z0-9+.\-]*:#i', $url)) {
+            return filter_var($url, FILTER_VALIDATE_URL) ? $url : '';
+        }
+
+        // No scheme at all — assume https://
+        $url = 'https://' . $url;
         return filter_var($url, FILTER_VALIDATE_URL) ? $url : '';
     }
 
@@ -459,12 +506,19 @@ class Scraper
     /** Checks whether an image URL responds with 200. */
     private static function imageExists(string $url): bool
     {
+        if (!UrlValidator::isSafeToFetch($url)) {
+            Logger::scraper(Logger::WARNING, 'SSRF blocked in imageExists', ['url' => $url]);
+            return false;
+        }
         $ch = curl_init($url);
         curl_setopt_array($ch, [
-            CURLOPT_NOBODY         => true,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 5,
-            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_NOBODY          => true,
+            CURLOPT_RETURNTRANSFER  => true,
+            CURLOPT_TIMEOUT         => 5,
+            CURLOPT_SSL_VERIFYPEER  => true,
+            CURLOPT_FOLLOWLOCATION  => false,
+            CURLOPT_PROTOCOLS       => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+            CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
         ]);
         curl_exec($ch);
         $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);

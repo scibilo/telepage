@@ -112,6 +112,7 @@ $faviconV = $config['logo_updated'] ?? filemtime(TELEPAGE_ROOT . '/' . $faviconP
     <link rel="stylesheet" href="assets/css/style.css?v=<?= filemtime(TELEPAGE_ROOT.'/assets/css/style.css') ?>">
     <?php if ($isAdmin): ?>
     <meta name="csrf" content="<?= htmlspecialchars($_SESSION['csrf_token'] ?? '') ?>">
+    <script src="assets/js/api.js?v=<?= @filemtime(TELEPAGE_ROOT.'/assets/js/api.js') ?: time() ?>"></script>
     <?php endif; ?>
     
     <!-- Scripting Config -->

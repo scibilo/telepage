@@ -165,20 +165,18 @@
                 if (delBtn) delBtn.addEventListener("click", async (e) => {
                     e.stopPropagation();
                     if (!confirm("Delete this content from the site?")) return;
-                    try {
-                        const csrf = document.querySelector("meta[name=csrf]")?.content||"";
-                        const res  = await fetch("api/admin.php?action=delete_content",{
-                            method:"POST", headers:{"Content-Type":"application/json","X-CSRF-Token":csrf},
-                            body:JSON.stringify({id:parseInt(card.id)})
-                        });
-                        const data = await res.json();
-                        if (data.ok) {
-                            el.style.transition="opacity .3s,transform .3s";
-                            el.style.opacity="0"; el.style.transform="scale(0.9)";
-                            // After animation, reload current page so count and pagination update
-                            setTimeout(()=>{ el.remove(); loadContents(true); }, 300);
-                        } else alert("Errore: "+(data.error||"impossibile eliminare"));
-                    } catch(err) { alert("Errore: "+err.message); }
+                    const res = await tpApi("delete_content", {
+                        method: "POST",
+                        body: { id: parseInt(card.id) }
+                    });
+                    if (res.ok) {
+                        el.style.transition="opacity .3s,transform .3s";
+                        el.style.opacity="0"; el.style.transform="scale(0.9)";
+                        // After animation, reload current page so count and pagination update
+                        setTimeout(()=>{ el.remove(); loadContents(true); }, 300);
+                    } else {
+                        alert("Errore: " + (res.error || "impossibile eliminare"));
+                    }
                 });
             }
 

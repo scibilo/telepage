@@ -62,11 +62,15 @@ class TelegramImporter
             ];
         }
 
-        // Range date effettivo
-        $dates = array_column($filtered, 'date');
+        // Range date effettivo — date may be ISO string or unix timestamp,
+        // normalise to int here so date() in the response won't explode.
+        $dates = array_map(
+            fn($m) => is_int($m['date']) ? $m['date'] : (int) strtotime($m['date'] ?? ''),
+            $filtered
+        );
         sort($dates);
-        $minDate = $dates[0]          ?? 0;
-        $maxDate = end($dates)        ?: 0;
+        $minDate = $dates[0]   ?? 0;
+        $maxDate = end($dates) ?: 0;
 
         // Save import queue to a temporary table (merged in cursor status)
         // Usiamo import_cursors per tracciare lo stato

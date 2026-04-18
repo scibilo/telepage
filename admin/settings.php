@@ -236,24 +236,14 @@ async function saveSettings(e) {
         if (!formData.has(k)) data[k] = false;
     });
 
-    try {
-        const response = await fetch('../api/admin.php?action=save_settings', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': document.querySelector('meta[name="csrf"]').content
-            },
-            body: JSON.stringify(data)
-        });
-
-        const result = await response.json();
-        if (result.ok) {
-            showToast();
-        } else {
-            alert('Error while saving: ' + result.error);
-        }
-    } catch (error) {
-        alert('Network error: ' + error.message);
+    const result = await tpApi('save_settings', {
+        method: 'POST',
+        body: data
+    });
+    if (result.ok) {
+        showToast();
+    } else {
+        alert('Error while saving: ' + result.error);
     }
 }
 
@@ -268,27 +258,13 @@ function showToast() {
 
 async function adminAction(action, data = null) {
     if (!confirm('Are you sure you want to perform this action?')) return;
-    
-    try {
-        const options = {
-            method: 'POST',
-            headers: { 'X-CSRF-Token': document.querySelector('meta[name="csrf"]').content }
-        };
-        
-        if (data) {
-            options.headers['Content-Type'] = 'application/json';
-            options.body = JSON.stringify(data);
-        }
 
-        const response = await fetch(`../api/admin.php?action=${action}`, options);
-        if (!response.ok) throw new Error('Invalid server response: ' + response.status);
-        
-        const result = await response.json();
-        alert(result.ok ? 'Operation complete!' : 'Error: ' + result.error);
-        if (result.ok) location.reload();
-    } catch (error) {
-        alert('Errore: ' + error.message);
-    }
+    const result = await tpApi(action, {
+        method: 'POST',
+        body: data || {}
+    });
+    alert(result.ok ? 'Operation complete!' : 'Error: ' + result.error);
+    if (result.ok) location.reload();
 }
 
 async function factoryReset() {
@@ -297,24 +273,15 @@ async function factoryReset() {
 
     if (!confirm('FINAL WARNING: Confirm the full reset of Telepage?')) return;
 
-    try {
-        const response = await fetch(`../api/admin.php?action=factory_reset`, {
-            method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': document.querySelector('meta[name="csrf"]').content 
-            },
-            body: JSON.stringify({ confirm: 'FACTORY RESET' })
-        });
-        const result = await response.json();
-        if (result.ok) {
-            alert('System reset successfully. You will be redirected to the installer.');
-            window.location.href = '../install/index.php';
-        } else {
-            alert('Error: ' + result.error);
-        }
-    } catch (error) {
-        alert('Fatal error: ' + error.message);
+    const result = await tpApi('factory_reset', {
+        method: 'POST',
+        body: { confirm: 'FACTORY RESET' }
+    });
+    if (result.ok) {
+        alert('System reset successfully. You will be redirected to the installer.');
+        window.location.href = '../install/index.php';
+    } else {
+        alert('Error: ' + result.error);
     }
 }
 
@@ -325,22 +292,16 @@ async function uploadLogo(e) {
     const formData = new FormData();
     formData.append('logo', file);
 
-    try {
-        const response = await fetch('../api/admin.php?action=upload_logo', {
-            method: 'POST',
-            headers: { 'X-CSRF-Token': document.querySelector('meta[name="csrf"]').content },
-            body: formData
-        });
-        const result = await response.json();
-        if (result.ok) {
-            document.getElementById('logo-preview').src = '../' + result.data.path + '?t=' + new Date().getTime();
-            document.querySelector('[name="logo_path"]').value = result.data.path;
-            showToast('Logo uploaded and optimised!');
-        } else {
-            alert('Upload error: ' + result.error);
-        }
-    } catch (error) {
-        alert('Network error: ' + error.message);
+    const result = await tpApi('upload_logo', {
+        method: 'POST',
+        formData: formData
+    });
+    if (result.ok) {
+        document.getElementById('logo-preview').src = '../' + result.data.path + '?t=' + new Date().getTime();
+        document.querySelector('[name="logo_path"]').value = result.data.path;
+        showToast('Logo uploaded and optimised!');
+    } else {
+        alert('Upload error: ' + result.error);
     }
 }
 

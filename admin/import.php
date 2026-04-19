@@ -41,7 +41,7 @@ adminHeader('Import', 'import');
     </div>
 
     <!-- Date filters -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px" id="date-filters" style="display:none">
+    <div style="display:none;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px" id="date-filters">
         <div>
             <label style="display:block;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">From date</label>
             <input type="date" id="date-from" style="width:100%;padding:10px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-family:inherit;font-size:14px;outline:none">

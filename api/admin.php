@@ -796,8 +796,24 @@ function actionImportJson(): void
         jsonError(400, 'Invalid JSON file or not a Telegram Desktop export');
     }
 
-    $dateFrom = isset($_POST['date_from']) ? strtotime($_POST['date_from']) : 0;
-    $dateTo   = isset($_POST['date_to'])   ? strtotime($_POST['date_to'])   : PHP_INT_MAX;
+    // Parse date range.
+    //
+    // The UI sends date_from / date_to as 'yyyy-mm-dd' (HTML <input type=date>).
+    // strtotime() on that format returns midnight at the START of the given
+    // day in the server's local timezone. That is what we want for date_from,
+    // but for date_to we want the END of the chosen day — otherwise selecting
+    // 'from X to X' gives a 1-second window that matches almost nothing, and
+    // 'from X to Y' silently excludes all messages timestamped on day Y
+    // (a full day narrowing).
+    //
+    // Using '23:59:59' gives us inclusive end-of-day without needing to reason
+    // about DST edge cases that would come with a '+1 day - 1 second' approach.
+    $dateFrom = !empty($_POST['date_from'])
+        ? strtotime($_POST['date_from'] . ' 00:00:00')
+        : 0;
+    $dateTo   = !empty($_POST['date_to'])
+        ? strtotime($_POST['date_to']   . ' 23:59:59')
+        : PHP_INT_MAX;
 
     // Start async import (saves cursor, processing happens via polling)
     $result = TelegramImporter::startImport($data['messages'], (int) $dateFrom, (int) $dateTo);

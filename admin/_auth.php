@@ -15,6 +15,7 @@ Bootstrap::init(Bootstrap::MODE_HTML);
 require_once TELEPAGE_ROOT . '/app/Config.php';
 require_once TELEPAGE_ROOT . '/app/DB.php';
 require_once TELEPAGE_ROOT . '/app/Logger.php';
+require_once TELEPAGE_ROOT . '/app/Str.php';
 
 if (!Config::isInstalled()) {
     header('Location: ../install/index.php');
@@ -49,7 +50,7 @@ $GLOBALS['csrf_token'] = $_SESSION['csrf_token'];
 $GLOBALS['admin_user'] = $_SESSION['admin_user'] ?? 'Admin';
 $config = Config::get();
 $GLOBALS['app_name'] = $config['app_name'] ?? 'Telepage';
-$GLOBALS['theme_color'] = $config['theme_color'] ?? '#0d6efd';
+$GLOBALS['theme_color'] = Str::safeHexColor($config['theme_color'] ?? null);
 
 function e(string $s): string {
     return htmlspecialchars($s, ENT_QUOTES, 'UTF-8');

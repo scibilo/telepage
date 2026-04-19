@@ -31,6 +31,49 @@ declare(strict_types=1);
 class Str
 {
     /**
+     * Validates a hex color string like '#rgb' or '#rrggbb'. Returns the
+     * normalized lowercase value, or the provided default if invalid.
+     *
+     * This is used both at save time (to reject malicious input before
+     * it reaches config.json) AND at render time (to guard against
+     * any pre-existing bad value ever reaching an HTML/CSS attribute).
+     */
+    public static function safeHexColor(?string $value, string $default = '#3b82f6'): string
+    {
+        if ($value === null) {
+            return $default;
+        }
+        $v = strtolower(trim($value));
+        if (preg_match('/^#([0-9a-f]{3}|[0-9a-f]{6})$/', $v)) {
+            return $v;
+        }
+        return $default;
+    }
+
+    /**
+     * Clamps a user-provided display name to a sensible length. Does
+     * NOT escape HTML — callers must still run htmlspecialchars() at
+     * output time.
+     */
+    public static function clampDisplayName(?string $value, int $maxLen = 128, string $default = 'Telepage'): string
+    {
+        if ($value === null) {
+            return $default;
+        }
+        $v = trim($value);
+        if ($v === '') {
+            return $default;
+        }
+        // Strip control characters that could break HTML attributes even
+        // through htmlspecialchars (e.g. NUL bytes).
+        $v = preg_replace('/[\x00-\x1F\x7F]/u', '', $v) ?? $v;
+        if ($v === '') {
+            return $default;
+        }
+        return mb_substr($v, 0, $maxLen, 'UTF-8');
+    }
+
+    /**
      * Canonical slugification. Returns an empty string if the input
      * collapses to nothing (all punctuation, whitespace, etc.) — callers
      * MUST check for empty before using the result as a DB key.

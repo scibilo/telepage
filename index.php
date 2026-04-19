@@ -28,6 +28,7 @@ header('Vary: Cookie, Accept-Encoding'); // LiteSpeed/Cloudflare
 
 require_once TELEPAGE_ROOT . '/app/Config.php';
 require_once TELEPAGE_ROOT . '/app/DB.php';
+require_once TELEPAGE_ROOT . '/app/Str.php';
 
 // Se non installato, vai al wizard
 if (!Config::isInstalled()) {
@@ -47,7 +48,7 @@ $lang = file_exists($langFile) ? require $langFile : require TELEPAGE_ROOT . '/l
 
 // SEO e Meta
 $appName = $config['app_name'] ?? 'Telepage';
-$themeColor = $config['theme_color'] ?? '#3b82f6';
+$themeColor = Str::safeHexColor($config['theme_color'] ?? null);
 $logoPath = $config['logo_path'] ?? 'assets/img/logo.png';
 
 // Estrai parametri per stato iniziale (se presenti nell'URL)

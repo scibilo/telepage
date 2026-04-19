@@ -63,6 +63,36 @@ assertEq(Str::slugify('2024'),                 '2024',            'pure digits')
 assertEq(Str::slugify('covid-19'),             'covid-19',        'word-number');
 assertEq(Str::slugify('v2.0'),                 'v2-0',            'dot → dash');
 
+echo "\n[safeHexColor]\n";
+assertEq(Str::safeHexColor('#3b82f6'),                         '#3b82f6', 'valid 6-digit');
+assertEq(Str::safeHexColor('#FFF'),                            '#fff',    '3-digit normalized to lowercase');
+assertEq(Str::safeHexColor('#ABC123'),                         '#abc123', 'mixed case normalized');
+assertEq(Str::safeHexColor('  #000000  '),                     '#000000', 'trimmed');
+assertEq(Str::safeHexColor('red'),                             '#3b82f6', 'named color rejected (default)');
+assertEq(Str::safeHexColor('#12345'),                          '#3b82f6', '5-digit rejected');
+assertEq(Str::safeHexColor('#1234567'),                        '#3b82f6', '7-digit rejected');
+assertEq(Str::safeHexColor(''),                                '#3b82f6', 'empty rejected');
+assertEq(Str::safeHexColor(null),                              '#3b82f6', 'null rejected');
+assertEq(Str::safeHexColor('rgb(255,0,0)'),                    '#3b82f6', 'rgb() rejected');
+// The whole point of this validator: XSS payloads are rejected before
+// they ever reach config.json or the HTML renderer.
+assertEq(Str::safeHexColor('#fff; background: url(javascript:alert(1))'), '#3b82f6', 'CSS injection rejected');
+assertEq(Str::safeHexColor('</style><script>alert(1)</script>'),          '#3b82f6', 'HTML break-out rejected');
+assertEq(Str::safeHexColor('#abc', '#000'),                    '#abc',    'valid uses given default');
+assertEq(Str::safeHexColor('garbage', '#000'),                 '#000',    'invalid uses given default');
+
+echo "\n[clampDisplayName]\n";
+assertEq(Str::clampDisplayName('Telepage'),                   'Telepage',           'short pass-through');
+assertEq(Str::clampDisplayName('   spaced   '),               'spaced',             'trimmed');
+assertEq(Str::clampDisplayName(''),                           'Telepage',           'empty uses default');
+assertEq(Str::clampDisplayName(null),                         'Telepage',           'null uses default');
+assertEq(Str::clampDisplayName(str_repeat('x', 200), 10),     'xxxxxxxxxx',         'clamped to maxLen');
+assertEq(Str::clampDisplayName("name\x00with\x01controls"),   'namewithcontrols',   'control chars stripped');
+// clampDisplayName does NOT escape HTML — the caller is responsible.
+// It just prevents storing DoS-sized names or raw control chars.
+assertEq(Str::clampDisplayName('<b>bold</b>'),                '<b>bold</b>',        'HTML left intact (escaped at render time)');
+assertEq(Str::clampDisplayName('Caffè & Cornetti'),           'Caffè & Cornetti',   'unicode + ampersand preserved');
+
 echo "\n";
 if ($failures > 0) {
     echo "FAILED: {$failures} test(s)\n";

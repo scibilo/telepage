@@ -491,6 +491,17 @@ function actionSaveSettings(): void
                 $updates[$key] = in_array($body[$key], ['classic', 'enhanced', 'loadmore', 'infinite'])
                     ? $body[$key]
                     : 'classic';
+            } elseif ($key === 'theme_color') {
+                // Must be #rgb or #rrggbb. Anything else falls back to the
+                // stock accent colour — this blocks XSS via CSS injection
+                // (a value like '; url(javascript:...) //' would otherwise
+                // end up inside <body style="--accent-color: …;">).
+                $updates[$key] = Str::safeHexColor((string) $body[$key]);
+            } elseif ($key === 'app_name') {
+                // Length-clamped and stripped of control chars. HTML escaping
+                // happens at render time via e()/htmlspecialchars — this
+                // just prevents storing absurdly long or malformed names.
+                $updates[$key] = Str::clampDisplayName((string) $body[$key]);
             } else {
                 $updates[$key] = (string) $body[$key];
             }

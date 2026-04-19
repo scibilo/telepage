@@ -117,7 +117,7 @@ async function loadTags() {
 
 function autoSlug() {
     const name = document.getElementById('tag-name').value;
-    document.getElementById('tag-slug').value = name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').trim('-');
+    document.getElementById('tag-slug').value = tpSlugify(name);
 }
 
 function openTagModal() {

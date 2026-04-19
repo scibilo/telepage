@@ -21,6 +21,7 @@ require_once TELEPAGE_ROOT . '/app/Config.php';
 require_once TELEPAGE_ROOT . '/app/DB.php';
 require_once TELEPAGE_ROOT . '/app/Logger.php';
 require_once TELEPAGE_ROOT . '/app/Security/CsrfGuard.php';
+require_once TELEPAGE_ROOT . '/app/Str.php';
 require_once TELEPAGE_ROOT . '/app/TelegramBot.php';
 require_once TELEPAGE_ROOT . '/app/Scraper.php';
 
@@ -598,12 +599,20 @@ function actionSaveTag(): void
     $data = getJsonBody();
     $id    = (int) ($data['id'] ?? 0);
     $name  = trim($data['name'] ?? '');
-    $slug  = trim($data['slug'] ?? '');
     $color = trim($data['color'] ?? '#3b82f6');
     $src   = trim($data['source'] ?? 'manual');
 
-    if (empty($name) || empty($slug)) {
-        jsonError(400, 'Name and Slug are required');
+    if (empty($name)) {
+        jsonError(400, 'Name is required');
+    }
+
+    // Slug is always derived server-side from name — the client-side
+    // tpSlugify() just previews what we'll compute here. We don't trust
+    // whatever slug the client posts: it could be arbitrary (path-like,
+    // duplicate of another tag's slug, etc.).
+    $slug = Str::slugify($name);
+    if (empty($slug)) {
+        jsonError(400, 'Name produces an empty slug (only punctuation?). Use alphanumeric characters.');
     }
 
     if ($id > 0) {

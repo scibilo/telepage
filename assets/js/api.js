@@ -129,4 +129,28 @@
 
     // Expose on window for non-module scripts (matches existing project style)
     global.tpApi = tpApi;
+
+    // Canonical slugify — must match app/Str.php::slugify() output for any
+    // ASCII input. Used by the tag form in admin/tags.php so that slugs
+    // previewed client-side agree with what the backend would produce.
+    //
+    // Policy:
+    //   1. lowercase
+    //   2. NFD decompose + strip combining marks (removes diacritics)
+    //   3. [^a-z0-9_-] → '-'
+    //   4. collapse consecutive dashes
+    //   5. trim leading/trailing '-'
+    function tpSlugify(text) {
+        if (text == null) return '';
+        let s = String(text).toLowerCase();
+        // NFD decomposition lets us strip combining marks (accents)
+        // leaving the base letter: 'caffè' → 'caffe', 'naïve' → 'naive'.
+        if (typeof s.normalize === 'function') {
+            s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        }
+        s = s.replace(/[^a-z0-9_\-]+/g, '-');
+        s = s.replace(/-+/g, '-');
+        return s.replace(/^-+|-+$/g, '');
+    }
+    global.tpSlugify = tpSlugify;
 })(window);

@@ -26,6 +26,7 @@ require_once __DIR__ . '/Config.php';
 require_once __DIR__ . '/DB.php';
 require_once __DIR__ . '/Logger.php';
 require_once __DIR__ . '/Scraper.php';
+require_once __DIR__ . '/Str.php';
 
 class HistoryScanner
 {
@@ -485,7 +486,7 @@ class HistoryScanner
             // Salva tag
             foreach (array_unique(array_filter($hashtags)) as $tag) {
                 $name = strtolower(trim($tag));
-                $slug = trim(preg_replace('/[^a-z0-9\-]/', '-', $name), '-');
+                $slug = Str::slugify($name);
                 if (empty($slug)) continue;
 
                 DB::query(

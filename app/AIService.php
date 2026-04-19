@@ -16,6 +16,7 @@
 require_once __DIR__ . '/Config.php';
 require_once __DIR__ . '/DB.php';
 require_once __DIR__ . '/Logger.php';
+require_once __DIR__ . '/Str.php';
 
 class AIService
 {
@@ -256,7 +257,7 @@ PROMPT;
             $name = strtolower(trim($tagName));
             if (empty($name)) continue;
 
-            $slug = self::slugify($name);
+            $slug = Str::slugify($name);
 
             // Inserisci tag se non esiste, fonte AI
             DB::query(
@@ -276,14 +277,4 @@ PROMPT;
         }
     }
 
-    /**
-     * Utility per slugify.
-     */
-    private static function slugify(string $text): string
-    {
-        $text = mb_strtolower($text);
-        $text = preg_replace('/[^a-z0-9\-\_]/', '-', $text) ?? $text;
-        $text = preg_replace('/-+/', '-', $text) ?? $text;
-        return trim($text, '-');
-    }
 }

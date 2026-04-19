@@ -41,6 +41,19 @@ if (!empty($_SESSION['login_time']) && (time() - $_SESSION['login_time']) > 2880
     exit;
 }
 
+// Verify the admin record still exists in the DB. This closes the
+// window where a stolen or leaked session cookie would remain valid
+// after the admin has been deleted, the database has been reset,
+// or a factory reset has wiped everything. Without this check,
+// PHP sessions live on the filesystem independently of the DB and
+// survive any data-layer cleanup.
+$adminId = (int) ($_SESSION['admin_id'] ?? 0);
+if ($adminId <= 0 || !DB::fetchOne('SELECT id FROM admins WHERE id = :id', [':id' => $adminId])) {
+    session_destroy();
+    header('Location: login.php?invalid=1');
+    exit;
+}
+
 // Global CSRF token for admin pages
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));

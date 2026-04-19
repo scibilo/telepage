@@ -45,6 +45,16 @@ if (!empty($_SESSION['login_time']) && (time() - $_SESSION['login_time']) > 2880
     jsonError(401, 'Session expired');
 }
 
+// Verify the admin record still exists. Closes the window where a
+// leaked session remains valid after the admin row has been deleted
+// or the database reset. See admin/_auth.php for the matching check
+// on page loads.
+$adminId = (int) ($_SESSION['admin_id'] ?? 0);
+if ($adminId <= 0 || !DB::fetchOne('SELECT id FROM admins WHERE id = :id', [':id' => $adminId])) {
+    session_destroy();
+    jsonError(401, 'Session no longer valid');
+}
+
 // CSRF: reject any write request without a valid X-CSRF-Token header.
 // GET/HEAD pass through untouched (handled inside verifyForWrite).
 CsrfGuard::verifyForWrite();
@@ -261,6 +271,14 @@ function actionResetDatabase(): void
     }
     $pdo->exec('DELETE FROM sqlite_sequence WHERE name != "admins"');
     $pdo->exec('VACUUM');
+
+    // Rotate the session ID so that any cookie that was in circulation
+    // before the reset (e.g. stolen or leaked) no longer matches the
+    // current session. The admin who triggered the reset keeps their
+    // access via the new ID; any other copy of the old cookie is
+    // rejected on next request because the session row it points to
+    // has been destroyed by regenerate_id(true).
+    session_regenerate_id(true);
 
     jsonOk(['reset' => true]);
 }

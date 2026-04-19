@@ -60,54 +60,137 @@ function clientIp(): string
 // -----------------------------------------------------------------------
 // Brute-force protection
 // -----------------------------------------------------------------------
+//
+// Two-axis rate limiting protects both against single-IP brute-force and
+// distributed attacks via IP rotation:
+//
+//   Per-(IP, username): MAX_PER_IP_PER_USER attempts from the same IP
+//     against the same username in LOCK_PER_IP seconds. Key in the
+//     rate_limits table: ip=<ip>, endpoint="login:<username>"
+//
+//   Global per-username: MAX_GLOBAL_PER_USER attempts against the same
+//     username from ANY IP in LOCK_GLOBAL seconds. Key in rate_limits:
+//     ip="GLOBAL", endpoint="login_global:<username>"
+//
+// A login attempt is rejected if EITHER limit is reached. A successful
+// login clears both entries for that (ip, username) pair but leaves
+// other username entries untouched.
+//
+// Username is lowercased and length-clamped before use to normalise
+// keys and prevent table-stuffing with long garbage values.
 
-const MAX_ATTEMPTS  = 5;
-const LOCK_SECONDS  = 300; // 5 minutes
-const RATE_ENDPOINT = 'login';
+const MAX_PER_IP_PER_USER   = 5;
+const LOCK_PER_IP           = 900;  // 15 minutes
+const MAX_GLOBAL_PER_USER   = 30;
+const LOCK_GLOBAL           = 1800; // 30 minutes
+const USERNAME_MAX_LENGTH   = 64;
 
-function getRateLimitRecord(string $ip): ?array
+/**
+ * Normalises a username to a stable rate-limit key component.
+ * Empty input returns an empty string; callers should short-circuit.
+ */
+function normaliseUsername(string $username): string
+{
+    $u = strtolower(trim($username));
+    return substr($u, 0, USERNAME_MAX_LENGTH);
+}
+
+/**
+ * Fetches a single rate_limits row, or null if none.
+ */
+function getRateLimitRecord(string $ip, string $endpoint): ?array
 {
     return DB::fetchOne(
         'SELECT * FROM rate_limits WHERE ip = :ip AND endpoint = :ep',
-        [':ip' => $ip, ':ep' => RATE_ENDPOINT]
+        [':ip' => $ip, ':ep' => $endpoint]
     );
 }
 
-function isBlocked(string $ip): bool
+/**
+ * Returns true if (ip, endpoint) counter is at or above max and still
+ * inside the window. Transparently drops an expired window.
+ */
+function rateLimitHit(string $ip, string $endpoint, int $max, int $window): bool
 {
-    $rec = getRateLimitRecord($ip);
+    $rec = getRateLimitRecord($ip, $endpoint);
     if (!$rec) {
         return false;
     }
 
     $windowAge = time() - (int) $rec['window_start'];
-    if ($windowAge > LOCK_SECONDS) {
-        // Window expired — reset
+    if ($windowAge > $window) {
+        // Window expired — reset silently.
         DB::query(
             'DELETE FROM rate_limits WHERE ip = :ip AND endpoint = :ep',
-            [':ip' => $ip, ':ep' => RATE_ENDPOINT]
+            [':ip' => $ip, ':ep' => $endpoint]
         );
         return false;
     }
 
-    return (int) $rec['hit_count'] >= MAX_ATTEMPTS;
+    return (int) $rec['hit_count'] >= $max;
 }
 
-function recordAttempt(string $ip): void
+/**
+ * Returns true if either the per-(ip, username) OR the global-per-username
+ * limit is currently exceeded for this login attempt.
+ */
+function isBlocked(string $ip, string $username): bool
 {
+    if ($username === '') {
+        return false;
+    }
+    return rateLimitHit($ip,      "login:{$username}",        MAX_PER_IP_PER_USER, LOCK_PER_IP)
+        || rateLimitHit('GLOBAL', "login_global:{$username}", MAX_GLOBAL_PER_USER, LOCK_GLOBAL);
+}
+
+/**
+ * Increments both counters (per-IP+user and global-per-user) for a failed
+ * login attempt. Starts a fresh window on INSERT (ON CONFLICT upgrades
+ * the count, preserving the existing window_start so each window is a
+ * true rolling window from the first failure, not from the latest).
+ */
+function recordAttempt(string $ip, string $username): void
+{
+    if ($username === '') {
+        return;
+    }
+    $now = time();
+
+    // (ip, username) counter
     DB::query(
         'INSERT INTO rate_limits (ip, endpoint, hit_count, window_start)
          VALUES (:ip, :ep, 1, :now)
          ON CONFLICT(ip, endpoint) DO UPDATE SET hit_count = hit_count + 1',
-        [':ip' => $ip, ':ep' => RATE_ENDPOINT, ':now' => time()]
+        [':ip' => $ip, ':ep' => "login:{$username}", ':now' => $now]
+    );
+
+    // Global per-username counter
+    DB::query(
+        'INSERT INTO rate_limits (ip, endpoint, hit_count, window_start)
+         VALUES (:ip, :ep, 1, :now)
+         ON CONFLICT(ip, endpoint) DO UPDATE SET hit_count = hit_count + 1',
+        [':ip' => 'GLOBAL', ':ep' => "login_global:{$username}", ':now' => $now]
     );
 }
 
-function clearAttempts(string $ip): void
+/**
+ * Clears BOTH counters for this (ip, username) pair on a successful
+ * login. Other IPs that were racking up attempts on the same username
+ * are left untouched — if an attacker happened to be probing 'admin'
+ * during a legitimate login, their per-(ip, user) counter keeps going.
+ */
+function clearAttempts(string $ip, string $username): void
 {
+    if ($username === '') {
+        return;
+    }
     DB::query(
         'DELETE FROM rate_limits WHERE ip = :ip AND endpoint = :ep',
-        [':ip' => $ip, ':ep' => RATE_ENDPOINT]
+        [':ip' => $ip, ':ep' => "login:{$username}"]
+    );
+    DB::query(
+        'DELETE FROM rate_limits WHERE ip = :ip AND endpoint = :ep',
+        [':ip' => 'GLOBAL', ':ep' => "login_global:{$username}"]
     );
 }
 
@@ -132,56 +215,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Verify CSRF token
     $csrfReceived = $_POST['csrf_token'] ?? '';
+    $usernameRaw  = trim($_POST['username'] ?? '');
+    $username     = normaliseUsername($usernameRaw);
+
     if (!hash_equals($csrfToken, $csrfReceived)) {
         $error = 'Invalid security token. Please reload the page.';
-    } elseif (isBlocked($ip)) {
-        $error = 'Too many failed attempts. Please try again in 5 minutes.';
-        Logger::admin(Logger::WARNING, 'Login blocked: too many attempts', ['ip' => $ip]);
+    } elseif ($username === '' || empty($_POST['password'])) {
+        $error = 'Username and password are required.';
+    } elseif (isBlocked($ip, $username)) {
+        $error = 'Too many failed attempts for this account. Please try again later.';
+        Logger::admin(Logger::WARNING, 'Login blocked: rate limit exceeded', [
+            'ip'       => $ip,
+            'username' => $username,
+        ]);
     } else {
-        $username = trim($_POST['username'] ?? '');
         $password = $_POST['password'] ?? '';
 
-        if (empty($username) || empty($password)) {
-            $error = 'Username and password are required.';
+        $admin = DB::fetchOne(
+            'SELECT id, username, password_hash FROM admins WHERE lower(username) = :u',
+            [':u' => $username]
+        );
+
+        if ($admin && password_verify($password, $admin['password_hash'])) {
+            // ✓ Login successful
+
+            // Regenerate session ID
+            session_regenerate_id(true);
+
+            $_SESSION['admin_logged_in'] = true;
+            $_SESSION['admin_user']      = $admin['username'];
+            $_SESSION['admin_id']        = $admin['id'];
+            $_SESSION['login_time']      = time();
+
+            // Reset both counters for this (ip, username) pair.
+            clearAttempts($ip, $username);
+
+            Logger::admin(Logger::INFO, 'Login successful', ['username' => $admin['username']]);
+
+            header('Location: index.php');
+            exit;
         } else {
-            $admin = DB::fetchOne(
-                'SELECT id, username, password_hash FROM admins WHERE username = :u',
-                [':u' => $username]
-            );
+            // ✗ Login failed
+            recordAttempt($ip, $username);
 
-            if ($admin && password_verify($password, $admin['password_hash'])) {
-                // ✓ Login successful
+            $rec       = getRateLimitRecord($ip, "login:{$username}");
+            $remaining = MAX_PER_IP_PER_USER - (int) ($rec['hit_count'] ?? 0);
 
-                // Regenerate session ID
-                session_regenerate_id(true);
-
-                $_SESSION['admin_logged_in'] = true;
-                $_SESSION['admin_user']      = $admin['username'];
-                $_SESSION['admin_id']        = $admin['id'];
-                $_SESSION['login_time']      = time();
-
-                // Reset attempt counter
-                clearAttempts($ip);
-
-                Logger::admin(Logger::INFO, 'Login successful', ['username' => $username]);
-
-                header('Location: index.php');
-                exit;
+            if ($remaining <= 0) {
+                $error = 'Account temporarily locked after too many failed attempts.';
             } else {
-                // ✗ Login failed
-                recordAttempt($ip);
-
-                $rec = getRateLimitRecord($ip);
-                $remaining = MAX_ATTEMPTS - (int) ($rec['hit_count'] ?? 0);
-
-                if ($remaining <= 0) {
-                    $error = 'Account locked for 5 minutes after too many failed attempts.';
-                } else {
-                    $error = "Invalid credentials. {$remaining} attempt" . ($remaining === 1 ? ' remaining.' : 's remaining.');
-                }
-
-                Logger::admin(Logger::WARNING, 'Failed login attempt', ['username' => $username, 'ip' => $ip]);
+                $error = "Invalid credentials. {$remaining} attempt" . ($remaining === 1 ? ' remaining.' : 's remaining.');
             }
+
+            Logger::admin(Logger::WARNING, 'Failed login attempt', [
+                'username' => $username,
+                'ip'       => $ip,
+            ]);
         }
     }
 }

@@ -201,8 +201,26 @@ function actionCleanup(): void
     $stmt = DB::query('DELETE FROM contents WHERE is_deleted=1');
     $count = $stmt->rowCount();
 
-    Logger::admin(Logger::INFO, 'Cleanup done', ['records' => $count, 'files' => $files]);
-    jsonOk(['deleted_records' => $count, 'deleted_files' => $files]);
+    // Garbage-collect expired rate_limits rows. Keep only windows that
+    // started in the last hour — anything older is for sure expired for
+    // every rate policy we currently enforce (max LOCK_GLOBAL = 1800s).
+    $cutoff = time() - 3600;
+    $rlStmt = DB::query(
+        'DELETE FROM rate_limits WHERE window_start < :cutoff',
+        [':cutoff' => $cutoff]
+    );
+    $rateLimitsDeleted = $rlStmt->rowCount();
+
+    Logger::admin(Logger::INFO, 'Cleanup done', [
+        'records'      => $count,
+        'files'        => $files,
+        'rate_limits'  => $rateLimitsDeleted,
+    ]);
+    jsonOk([
+        'deleted_records'      => $count,
+        'deleted_files'        => $files,
+        'deleted_rate_limits'  => $rateLimitsDeleted,
+    ]);
 }
 
 /**

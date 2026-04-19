@@ -101,13 +101,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isInstalled) {
             header('Location: index.php?step=2');
             exit;
         }
-        if (!is_dir($dbDir)) @mkdir($dbDir, 0777, true);
+        if (!is_dir($dbDir)) @mkdir($dbDir, 0755, true);
         try {
-            if (file_exists($dbPath)) @chmod($dbPath, 0666);
-            if (is_dir($dbDir)) @chmod($dbDir, 0777);
             $pdo = new PDO('sqlite:' . $dbPath);
             $pdo->exec('PRAGMA journal_mode=WAL');
-            @chmod($dbPath, 0666);
             $_SESSION['install']['db_path'] = $dbPath;
             header('Location: index.php?step=3');
             exit;
@@ -198,11 +195,11 @@ function checkRequirements(): array {
     $curlOk = extension_loaded('curl');
     $checks[] = ['label' => 'cURL', 'ok' => $curlOk, 'detail' => $curlOk ? 'OK' : 'Missing'];
     $dataDir = TELEPAGE_ROOT . '/data';
-    if (!is_dir($dataDir)) @mkdir($dataDir, 0775, true);
+    if (!is_dir($dataDir)) @mkdir($dataDir, 0755, true);
     $dataWrite = is_writable($dataDir);
-    $checks[] = ['label' => 'data/ folder', 'ok' => $dataWrite, 'detail' => $dataWrite ? 'Writable' : 'CHMOD 777 req'];
+    $checks[] = ['label' => 'data/ folder', 'ok' => $dataWrite, 'detail' => $dataWrite ? 'Writable' : 'Not writable by the webserver user'];
     $configWrite = is_writable(file_exists(TELEPAGE_ROOT . '/config.json') ? TELEPAGE_ROOT . '/config.json' : TELEPAGE_ROOT);
-    $checks[] = ['label' => 'config.json', 'ok' => $configWrite, 'detail' => $configWrite ? 'Writable' : 'CHMOD 777 root req'];
+    $checks[] = ['label' => 'config.json', 'ok' => $configWrite, 'detail' => $configWrite ? 'Writable' : 'Project root not writable by the webserver user'];
     return $checks;
 }
 
@@ -210,8 +207,6 @@ function finalizeInstallation(): array {
     $sess   = $_SESSION['install'];
     $dbPath = $sess['db_path'] ?? (TELEPAGE_ROOT . '/data/app.sqlite');
     if (empty($dbPath)) $dbPath = TELEPAGE_ROOT . '/data/app.sqlite';
-    @chmod(dirname($dbPath), 0777);
-    if (file_exists($dbPath)) @chmod($dbPath, 0666);
 
     // Detect the public URL from $_SERVER BEFORE building $configData,
     // so 'custom_webhook_url' stores the right value from the first save.
@@ -235,7 +230,7 @@ function finalizeInstallation(): array {
     ];
     try {
         Config::save($configData);
-        DB::reset(); DB::initSchema(); @chmod($dbPath, 0666);
+        DB::reset(); DB::initSchema();
         DB::query('INSERT INTO admins (username, password_hash) VALUES (:u, :h) ON CONFLICT(username) DO UPDATE SET password_hash=excluded.password_hash', [':u' => $sess['admin_username'], ':h' => $sess['admin_password_hash']]);
         // Prima cancella webhook e svuota coda pendente (drop_pending_updates: true)
         // Evita che messaggi bufferizzati da Telegram arrivino subito dopo l'installazione

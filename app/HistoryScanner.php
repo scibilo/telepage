@@ -188,6 +188,52 @@ class HistoryScanner
             ];
         }
 
+        // Validate the bot token with a single getMe() call BEFORE entering
+        // the scan loop. With an invalid token every forwardMessage call
+        // returns 401 — cheap for Telegram, but looping up to MAX_ATTEMPTS
+        // times (2000) still occupied an Apache worker for minutes and
+        // piled up rate_limits / logs entries. A single failed getMe now
+        // short-circuits the whole batch.
+        if (!self::validateToken($token)) {
+            Logger::scanner(Logger::WARNING, 'Scan batch aborted: invalid bot token', [
+                'start_id' => $startId,
+            ]);
+            return [
+                'ok'            => false,
+                'error'         => 'Telegram bot token invalid or revoked — check Settings',
+                'imported'      => 0,
+                'skipped'       => 0,
+                'errors'        => 0,
+                'attempts'      => 0,
+                'next_start_id' => $startId,
+                'has_more'      => false,
+                'messages'      => [],
+            ];
+        }
+
+        // Also validate that the bot can see the configured channel —
+        // a valid token paired with an unreachable chat_id (bot removed
+        // from the channel, wrong ID, private channel without admin
+        // access) would otherwise loop forwardMessage failures just
+        // like the invalid-token case.
+        if (!self::validateChatAccess($token, $chatId)) {
+            Logger::scanner(Logger::WARNING, 'Scan batch aborted: chat not accessible', [
+                'start_id' => $startId,
+                'chat_id'  => $chatId,
+            ]);
+            return [
+                'ok'            => false,
+                'error'         => 'Channel not accessible — check that the bot is admin in the channel and that the Channel ID is correct',
+                'imported'      => 0,
+                'skipped'       => 0,
+                'errors'        => 0,
+                'attempts'      => 0,
+                'next_start_id' => $startId,
+                'has_more'      => false,
+                'messages'      => [],
+            ];
+        }
+
         $imported  = 0;
         $skipped   = 0;
         $errors    = 0;
@@ -584,6 +630,64 @@ class HistoryScanner
         if (preg_match('~instagram\.com~i', $url))           return 'instagram';
 
         return 'link';
+    }
+
+    /**
+     * Cheap bot-token healthcheck. Calls Telegram's getMe endpoint
+     * (no params, returns bot identity) and returns true only if the
+     * response is {'ok': true, ...}. Used by scanBatch to bail out
+     * early instead of looping forwardMessage calls against a dead
+     * token — otherwise each scan would occupy an Apache worker for
+     * the full set_time_limit window even though every call would
+     * fail with 401.
+     *
+     * Timeout is intentionally short (5s): a healthy Telegram response
+     * is typically <500ms; anything longer is itself a signal the
+     * endpoint is unreachable and the scan should not proceed.
+     */
+    private static function validateToken(string $token): bool
+    {
+        $url = "https://api.telegram.org/bot{$token}/getMe";
+        $ch  = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 5,
+            CURLOPT_SSL_VERIFYPEER => true,
+        ]);
+        $body = curl_exec($ch);
+        curl_close($ch);
+        if ($body === false) {
+            return false;
+        }
+        $parsed = json_decode($body, true);
+        return is_array($parsed) && !empty($parsed['ok']);
+    }
+
+    /**
+     * Cheap chat-access healthcheck via getChat(chat_id). A valid token
+     * with an unreachable chat (bot removed, wrong ID, private channel
+     * without admin access) would otherwise let every forwardMessage
+     * fail in a loop — same worker-occupation problem as validateToken.
+     */
+    private static function validateChatAccess(string $token, string $chatId): bool
+    {
+        $url = "https://api.telegram.org/bot{$token}/getChat";
+        $ch  = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => json_encode(['chat_id' => $chatId]),
+            CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+            CURLOPT_TIMEOUT        => 5,
+            CURLOPT_SSL_VERIFYPEER => true,
+        ]);
+        $body = curl_exec($ch);
+        curl_close($ch);
+        if ($body === false) {
+            return false;
+        }
+        $parsed = json_decode($body, true);
+        return is_array($parsed) && !empty($parsed['ok']);
     }
 
     private static function apiRequest(string $token, string $method, array $params = []): array

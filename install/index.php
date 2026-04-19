@@ -212,6 +212,15 @@ function finalizeInstallation(): array {
     if (empty($dbPath)) $dbPath = TELEPAGE_ROOT . '/data/app.sqlite';
     @chmod(dirname($dbPath), 0777);
     if (file_exists($dbPath)) @chmod($dbPath, 0666);
+
+    // Detect the public URL from $_SERVER BEFORE building $configData,
+    // so 'custom_webhook_url' stores the right value from the first save.
+    // Previously this line came AFTER $configData was built, leaving
+    // $baseUrl undefined at that point and 'custom_webhook_url' silently
+    // null — the webhook then registered but the value wasn't persisted
+    // for the admin UI to show, forcing a second save from Settings.
+    $baseUrl = getBaseUrl();
+
     $configData = [
         'app_name' => $sess['app_name'], 'theme_color' => $sess['theme_color'],
         'db_path' => $dbPath, 'telegram_bot_token' => $sess['bot_token'],
@@ -228,7 +237,6 @@ function finalizeInstallation(): array {
         Config::save($configData);
         DB::reset(); DB::initSchema(); @chmod($dbPath, 0666);
         DB::query('INSERT INTO admins (username, password_hash) VALUES (:u, :h) ON CONFLICT(username) DO UPDATE SET password_hash=excluded.password_hash', [':u' => $sess['admin_username'], ':h' => $sess['admin_password_hash']]);
-        $baseUrl = getBaseUrl();
         // Prima cancella webhook e svuota coda pendente (drop_pending_updates: true)
         // Evita che messaggi bufferizzati da Telegram arrivino subito dopo l'installazione
         telegramRequest($sess['bot_token'], 'deleteWebhook', ['drop_pending_updates' => true]);

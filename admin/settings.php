@@ -96,9 +96,17 @@ adminHeader('Settings', 'settings');
             <div class="form-group">
                 <label class="form-label">Custom Webhook URL (Optional)</label>
                 <?php
-                // Pre-fill with detected URL if not yet saved
-                $is_https    = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
-                $detectedUrl = ($is_https ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'])), '/');
+                // Pre-fill with detected URL if not yet saved.
+                // Host must be sanitized: HTTP_HOST is client-controllable
+                // and could contain injected characters. SERVER_NAME is
+                // preferred when the server config sets it meaningfully.
+                $is_https   = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+                $serverName = $_SERVER['SERVER_NAME'] ?? '';
+                $hostSource = ($serverName !== '' && $serverName !== '_' && $serverName !== 'default')
+                    ? $serverName
+                    : ($_SERVER['HTTP_HOST'] ?? '');
+                $safeHost    = Str::safeHost($hostSource, 'localhost');
+                $detectedUrl = ($is_https ? 'https' : 'http') . '://' . $safeHost . rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'])), '/');
                 $webhookUrlValue = $config['custom_webhook_url'] ?? $detectedUrl;
                 ?>
                 <input type="text" name="custom_webhook_url" class="form-control" value="<?= e($webhookUrlValue) ?>" placeholder="https://yourdomain.com/telepage">

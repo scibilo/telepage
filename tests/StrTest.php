@@ -93,6 +93,31 @@ assertEq(Str::clampDisplayName("name\x00with\x01controls"),   'namewithcontrols'
 assertEq(Str::clampDisplayName('<b>bold</b>'),                '<b>bold</b>',        'HTML left intact (escaped at render time)');
 assertEq(Str::clampDisplayName('Caffè & Cornetti'),           'Caffè & Cornetti',   'unicode + ampersand preserved');
 
+echo "\n[safeHost]\n";
+assertEq(Str::safeHost('example.com'),                 'example.com',         'plain hostname');
+assertEq(Str::safeHost('sub.example.com'),             'sub.example.com',     'subdomain');
+assertEq(Str::safeHost('example.com:8080'),            'example.com:8080',    'hostname with port');
+assertEq(Str::safeHost('localhost'),                   'localhost',           'localhost');
+assertEq(Str::safeHost('127.0.0.1'),                   '127.0.0.1',           'ipv4');
+assertEq(Str::safeHost('127.0.0.1:443'),               '127.0.0.1:443',       'ipv4 with port');
+assertEq(Str::safeHost('[::1]'),                       '[::1]',               'ipv6 literal');
+assertEq(Str::safeHost('[::1]:443'),                   '[::1]:443',           'ipv6 literal with port');
+assertEq(Str::safeHost('Example.COM'),                 'Example.COM',         'case preserved (servers compare case-insensitively)');
+// Rejections — these are the whole point: block Host-header injection.
+assertEq(Str::safeHost('evil.com/path'),               'localhost',           'path rejected');
+assertEq(Str::safeHost('evil.com?x=1'),                'localhost',           'query rejected');
+assertEq(Str::safeHost('evil.com#frag'),               'localhost',           'fragment rejected');
+assertEq(Str::safeHost("evil.com\r\nSet-Cookie: x"),   'localhost',           'CRLF injection rejected');
+assertEq(Str::safeHost('evil.com:80:81'),              'localhost',           'double port rejected');
+assertEq(Str::safeHost('evil com'),                    'localhost',           'space rejected');
+assertEq(Str::safeHost('javascript:alert(1)'),         'localhost',           'scheme prefix rejected');
+assertEq(Str::safeHost('   '),                         'localhost',           'whitespace-only uses fallback');
+assertEq(Str::safeHost(''),                            'localhost',           'empty uses fallback');
+assertEq(Str::safeHost(null),                          'localhost',           'null uses fallback');
+assertEq(Str::safeHost(str_repeat('a', 300)),          'localhost',           'overlong rejected');
+assertEq(Str::safeHost('valid.com', 'back.up'),        'valid.com',           'valid passes through with custom fallback');
+assertEq(Str::safeHost('bad!!host', 'back.up'),        'back.up',             'invalid uses custom fallback');
+
 echo "\n";
 if ($failures > 0) {
     echo "FAILED: {$failures} test(s)\n";

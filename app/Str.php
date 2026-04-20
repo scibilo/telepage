@@ -74,6 +74,44 @@ class Str
     }
 
     /**
+     * Returns a sanitized hostname (+ optional port) from the client-provided
+     * input. Rejects anything that isn't a plain host[:port] and returns the
+     * fallback instead.
+     *
+     * Valid:    "example.com", "sub.example.com:8080", "localhost", "127.0.0.1"
+     * Rejected: "evil.com/path", "evil.com?x=1", "evil.com\r\nSet-Cookie: x",
+     *           "javascript:alert(1)", "evil.com:80:81", trailing whitespace,
+     *           whatever else a crafted Host: header could smuggle.
+     *
+     * Important: this is a SYNTACTIC check. It does NOT verify that the host
+     * is one of the server's canonical names; that would require an explicit
+     * allowed_hosts list in config. What it prevents is injection of control
+     * characters and URL components that could cascade into log lines,
+     * webhook URLs, or redirect targets.
+     */
+    public static function safeHost(?string $value, string $fallback = 'localhost'): string
+    {
+        if ($value === null) {
+            return $fallback;
+        }
+        $v = trim($value);
+        if ($v === '') {
+            return $fallback;
+        }
+        // Hostname + optional port, nothing else. The hostname itself is a
+        // pragmatic superset of RFC 952/1123: letters, digits, dots, dashes,
+        // plus colons and square brackets for IPv6 literals like "[::1]:443".
+        // Length capped defensively; browsers cap Host around 253 chars.
+        if (strlen($v) > 253) {
+            return $fallback;
+        }
+        if (!preg_match('/^(?:\[[0-9a-fA-F:]+\]|[a-zA-Z0-9.\-]+)(?::\d{1,5})?$/', $v)) {
+            return $fallback;
+        }
+        return $v;
+    }
+
+    /**
      * Canonical slugification. Returns an empty string if the input
      * collapses to nothing (all punctuation, whitespace, etc.) — callers
      * MUST check for empty before using the result as a DB key.

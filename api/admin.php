@@ -1097,7 +1097,18 @@ function detectBaseUrl(): string
                  ($_SERVER['HTTP_X_FORWARDED_PORT'] ?? '') === '443');
 
     $scheme = $is_https ? 'https' : 'http';
-    $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
+
+    // Prefer SERVER_NAME (Apache/nginx config, not client-controllable) over
+    // HTTP_HOST (attacker can set any Host: header). Only fall back to
+    // HTTP_HOST if SERVER_NAME is missing or a useless default. In all cases
+    // sanitize the result — reject anything that isn't a plain host[:port].
+    $serverName = $_SERVER['SERVER_NAME'] ?? '';
+    $httpHost   = $_SERVER['HTTP_HOST']   ?? '';
+    if ($serverName !== '' && $serverName !== '_' && $serverName !== 'default') {
+        $host = Str::safeHost($serverName, 'localhost');
+    } else {
+        $host = Str::safeHost($httpHost, 'localhost');
+    }
 
     // Calculate path from the physical file location
     // TELEPAGE_ROOT is defined as dirname(__DIR__) by the including file

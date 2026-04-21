@@ -60,14 +60,46 @@ if (!Config::isInstalled()) {
     exit;
 }
 
+// Reject non-JSON content types up front. Telegram always sends
+// application/json; anything else is a misconfiguration or a probe,
+// not worth allocating the body buffer for.
+$contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+if (!str_starts_with($contentType, 'application/json')) {
+    http_response_code(415);
+    exit;
+}
+
 // -----------------------------------------------------------------------
 // Read and decode the body
 // -----------------------------------------------------------------------
+//
+// Body size cap: Telegram updates in practice stay well below 100 KB,
+// with media_group + entity-heavy messages approaching ~500 KB at the
+// extreme. We cap at 1 MB which leaves 2× headroom over anything
+// legitimate and blocks a compromised-secret attacker from pushing
+// multi-megabyte payloads that would each balloon an Apache worker's
+// RSS. 413 is the standard status for oversized bodies.
 
-$rawBody = file_get_contents('php://input');
+const MAX_WEBHOOK_BODY_BYTES = 1_048_576; // 1 MB
 
-if (empty($rawBody)) {
+$contentLength = isset($_SERVER['CONTENT_LENGTH']) ? (int) $_SERVER['CONTENT_LENGTH'] : -1;
+if ($contentLength > MAX_WEBHOOK_BODY_BYTES) {
+    http_response_code(413);
+    exit;
+}
+
+$rawBody = file_get_contents('php://input', false, null, 0, MAX_WEBHOOK_BODY_BYTES + 1);
+
+if ($rawBody === false || $rawBody === '') {
     http_response_code(400);
+    exit;
+}
+
+// Catch chunked transfers (or missing Content-Length) that turn out to
+// exceed the cap: read one byte past the limit, then refuse if any
+// data ended up beyond MAX_WEBHOOK_BODY_BYTES.
+if (strlen($rawBody) > MAX_WEBHOOK_BODY_BYTES) {
+    http_response_code(413);
     exit;
 }
 

@@ -200,7 +200,81 @@ function checkRequirements(): array {
     $checks[] = ['label' => 'data/ folder', 'ok' => $dataWrite, 'detail' => $dataWrite ? 'Writable' : 'Not writable by the webserver user'];
     $configWrite = is_writable(file_exists(TELEPAGE_ROOT . '/config.json') ? TELEPAGE_ROOT . '/config.json' : TELEPAGE_ROOT);
     $checks[] = ['label' => 'config.json', 'ok' => $configWrite, 'detail' => $configWrite ? 'Writable' : 'Project root not writable by the webserver user'];
+
+    // Verify .htaccess is actually honoured by the webserver.
+    //
+    // The repo ships a .htaccess that denies HTTP access to .json/.md/.log
+    // etc., but Apache silently ignores .htaccess when AllowOverride is
+    // set to None, and nginx ignores it entirely. Without this check
+    // a fresh install could expose config.json (telegram_bot_token,
+    // gemini_api_key, webhook_secret) to any HTTP client that guesses
+    // the path.
+    //
+    // Technique: drop a temporary canary file matching the .htaccess
+    // block rule, then fetch it back via the public HTTP URL. If the
+    // response body equals the canary content, .htaccess is NOT being
+    // applied. If the fetch fails (403/404/timeout/connection refused)
+    // we treat it as safe enough. If the fetch cannot be performed at
+    // all (cURL missing, detectBaseUrl unreachable via loopback on
+    // hardened hosts), we return an 'unknown' state rather than a
+    // false green.
+    $checks[] = htaccessEffectiveCheck();
+
     return $checks;
+}
+
+/**
+ * Drops a canary .json file next to config.json and tries to GET it over
+ * HTTP. Returns a check row shaped like the others.
+ */
+function htaccessEffectiveCheck(): array {
+    $label = '.htaccess enforcement';
+
+    if (!extension_loaded('curl')) {
+        return ['label' => $label, 'ok' => false, 'detail' => 'Cannot verify — cURL missing'];
+    }
+
+    $canaryName = '.telepage-canary-' . bin2hex(random_bytes(6)) . '.json';
+    $canaryPath = TELEPAGE_ROOT . '/' . $canaryName;
+    $canaryBody = 'CANARY_' . bin2hex(random_bytes(8));
+
+    if (@file_put_contents($canaryPath, $canaryBody) === false) {
+        // Not writable here is already covered by the config.json check
+        // above; we still don't want to claim safety we haven't proven.
+        return ['label' => $label, 'ok' => false, 'detail' => 'Cannot verify — project root not writable for canary'];
+    }
+
+    $url = rtrim(getBaseUrl(), '/') . '/' . $canaryName;
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_TIMEOUT        => 5,
+        CURLOPT_SSL_VERIFYPEER => false, // self-signed dev certs are common at install time
+        CURLOPT_SSL_VERIFYHOST => 0,
+    ]);
+    $body = curl_exec($ch);
+    $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $err  = curl_error($ch);
+    curl_close($ch);
+
+    @unlink($canaryPath);
+
+    if ($body === false || $code === 0) {
+        // Loopback blocked, DNS not resolving the public host from inside
+        // the server, firewall denying self-requests, etc. We don't know.
+        $hint = $err !== '' ? " ({$err})" : '';
+        return ['label' => $label, 'ok' => false, 'detail' => 'Cannot verify — self-fetch failed' . $hint . '. Manually confirm that opening ' . $url . ' in a browser does NOT show the file content.'];
+    }
+
+    if ($code >= 200 && $code < 300 && $body === $canaryBody) {
+        // The file was served verbatim: .htaccess is NOT being applied.
+        return ['label' => $label, 'ok' => false, 'detail' => 'CRITICAL: .json files are publicly readable. Set AllowOverride to All for this directory in Apache config, or on nginx add a location block that denies .json / .md / .log / .lock.'];
+    }
+
+    // Any other code (403, 404, 5xx, wrong body) is good enough.
+    return ['label' => $label, 'ok' => true, 'detail' => 'OK (canary blocked with HTTP ' . $code . ')'];
 }
 
 function finalizeInstallation(): array {

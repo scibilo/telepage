@@ -1,5 +1,7 @@
 # Sensitive configuration
 config.json
+config.json.lock
+config.json.tmp.*
 
 # Database
 data/app.sqlite

@@ -131,6 +131,13 @@ class Config
      * Salva l'array di configurazione su config.json.
      * NON usa mai var_export o serialize: solo json_encode.
      *
+     * Not concurrency-safe by itself — concurrent callers can still
+     * lose updates relative to each other (see update() for the
+     * locked read-modify-write wrapper that concurrent writers
+     * should use). This method is exposed for first-time writes
+     * (install wizard, migration scripts) where a single writer
+     * is the only process touching the file.
+     *
      * @param array<string, mixed> $data Array completo da salvare
      * @throws RuntimeException se la scrittura fallisce
      */
@@ -148,10 +155,14 @@ class Config
             throw new RuntimeException('Config::save() — json_encode failed: ' . json_last_error_msg());
         }
 
-        // Scrittura atomica: scrivi su file temporaneo, poi rinomina
-        $tmpPath = $path . '.tmp.' . getmypid();
+        // Atomic write: write to tmp file then rename. rename(2) is
+        // atomic on POSIX for files on the same filesystem, so readers
+        // never see a partial file. A random suffix (not just PID)
+        // keeps two concurrent saves with the same PID on a restart
+        // from colliding on the tmp path.
+        $tmpPath = $path . '.tmp.' . getmypid() . '.' . bin2hex(random_bytes(4));
 
-        if (file_put_contents($tmpPath, $json, LOCK_EX) === false) {
+        if (file_put_contents($tmpPath, $json) === false) {
             throw new RuntimeException('Config::save() — cannot write ' . $tmpPath);
         }
 
@@ -167,14 +178,48 @@ class Config
     /**
      * Updates only the specified keys, leaving the others unchanged.
      *
+     * Race-safe against concurrent updates: the read-modify-write
+     * cycle runs under an exclusive flock() on a dedicated lock file.
+     * Two concurrent calls to update() with different keys will
+     * therefore always both land in the final config — the old code
+     * had a lost-update window where the later writer's get() would
+     * read the state BEFORE the earlier writer's save(), then
+     * overwrite the earlier writer's changes on merge.
+     *
      * @param array<string, mixed> $updates Key→value pairs to update
      * @throws RuntimeException
      */
     public static function update(array $updates): void
     {
-        $current = self::get();
-        $merged  = array_merge($current, $updates);
-        self::save($merged);
+        $lockPath = self::getConfigPath() . '.lock';
+
+        // 'c' creates the file if missing without truncating. We need
+        // the handle alive for the entire critical section; fclose
+        // releases the lock implicitly on PHP ≤7; explicit LOCK_UN +
+        // fclose is safer across versions.
+        $lock = @fopen($lockPath, 'c');
+        if ($lock === false) {
+            throw new RuntimeException('Config::update() — cannot open lock file ' . $lockPath);
+        }
+
+        if (!flock($lock, LOCK_EX)) {
+            fclose($lock);
+            throw new RuntimeException('Config::update() — cannot acquire exclusive lock');
+        }
+
+        try {
+            // CRITICAL SECTION — no other updater can run here.
+            // Invalidate the in-memory cache first so get() re-reads
+            // the on-disk file: a previous updater in another process
+            // may have written between our last get() and now.
+            self::$cache = null;
+            $current = self::get();
+            $merged  = array_merge($current, $updates);
+            self::save($merged);
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
     }
 
     /**

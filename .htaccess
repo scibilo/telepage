@@ -14,7 +14,7 @@ DirectoryIndex index.php
 <FilesMatch "\.json$">
     Require all denied
 </FilesMatch>
-<FilesMatch "\.(md|txt|sql|sh|log)$">
+<FilesMatch "\.(md|txt|sql|sh|log|lock)$">
     Require all denied
 </FilesMatch>
 <Files "reset.txt">

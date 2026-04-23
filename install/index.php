@@ -14,6 +14,7 @@ define('TELEPAGE_ROOT', dirname(__DIR__));
 require_once TELEPAGE_ROOT . '/app/Config.php';
 require_once TELEPAGE_ROOT . '/app/DB.php';
 require_once TELEPAGE_ROOT . '/app/Security/Session.php';
+require_once TELEPAGE_ROOT . '/app/Str.php';
 
 // -----------------------------------------------------------------------
 // Session management
@@ -89,9 +90,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isInstalled) {
     $postStep = (int) ($_POST['step'] ?? 0);
     
     if ($postStep === 1) {
+        // The admin Settings form (api/admin.php::actionSaveSettings)
+        // validates app_name and theme_color via Str::clampDisplayName
+        // and Str::safeHexColor respectively (fix #8). The install
+        // wizard must apply the same rules — otherwise a hostile payload
+        // injected during first install would land in config.json
+        // before any other code gets to see it.
         $_SESSION['install']['site_language'] = $_POST['site_language'] ?? 'en';
-        $_SESSION['install']['app_name']      = trim($_POST['app_name'] ?? 'Telepage');
-        $_SESSION['install']['theme_color']    = trim($_POST['theme_color'] ?? '#3b82f6');
+        $_SESSION['install']['app_name']      = Str::clampDisplayName($_POST['app_name']    ?? null);
+        $_SESSION['install']['theme_color']   = Str::safeHexColor($_POST['theme_color']     ?? null);
         header('Location: index.php?step=2');
         exit;
     }

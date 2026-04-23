@@ -21,6 +21,7 @@ require_once TELEPAGE_ROOT . '/app/Config.php';
 require_once TELEPAGE_ROOT . '/app/DB.php';
 require_once TELEPAGE_ROOT . '/app/Logger.php';
 require_once TELEPAGE_ROOT . '/app/Security/CsrfGuard.php';
+require_once TELEPAGE_ROOT . '/app/Security/Session.php';
 require_once TELEPAGE_ROOT . '/app/Str.php';
 require_once TELEPAGE_ROOT . '/app/TelegramBot.php';
 require_once TELEPAGE_ROOT . '/app/Scraper.php';
@@ -29,11 +30,9 @@ require_once TELEPAGE_ROOT . '/app/Scraper.php';
 // 1. Authentication — first instruction
 // -----------------------------------------------------------------------
 
-ini_set('session.cookie_httponly', '1');
-ini_set('session.cookie_samesite', 'Strict');
-// Isolated session per installation: prevents two instances on the same domain from sharing a session
-session_name('tp_' . substr(hash('sha256', TELEPAGE_ROOT), 0, 16));
-session_start();
+// Isolated session per installation with Secure/HttpOnly/SameSite=Lax.
+// See app/Security/Session.php for the rationale.
+Session::start();
 
 if (empty($_SESSION['admin_logged_in'])) {
     jsonError(401, 'Unauthenticated');

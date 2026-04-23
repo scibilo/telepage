@@ -13,17 +13,20 @@ define('TELEPAGE_ROOT', dirname(__DIR__));
 
 require_once TELEPAGE_ROOT . '/app/Config.php';
 require_once TELEPAGE_ROOT . '/app/DB.php';
+require_once TELEPAGE_ROOT . '/app/Security/Session.php';
 
 // -----------------------------------------------------------------------
 // Session management
 // -----------------------------------------------------------------------
-session_start();
+Session::start();
 $hasConfig    = file_exists(dirname(__DIR__) . '/config.json');
 $currentStep  = (int)($_GET['step'] ?? 1);
 
 if (!$hasConfig && $currentStep === 1 && $_SERVER['REQUEST_METHOD'] === 'GET') {
     // Nuova installazione: pulisci sessione residua
-    session_unset(); session_destroy(); session_start();
+    session_unset();
+    session_destroy();
+    Session::start();
     $_SESSION['install'] = [];
 
     // Detach any residual webhook if there is an old token in the session or previous config

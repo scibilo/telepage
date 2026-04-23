@@ -15,6 +15,7 @@ Bootstrap::init(Bootstrap::MODE_HTML);
 require_once TELEPAGE_ROOT . '/app/Config.php';
 require_once TELEPAGE_ROOT . '/app/DB.php';
 require_once TELEPAGE_ROOT . '/app/Logger.php';
+require_once TELEPAGE_ROOT . '/app/Security/Session.php';
 require_once TELEPAGE_ROOT . '/app/Str.php';
 
 if (!Config::isInstalled()) {
@@ -22,12 +23,10 @@ if (!Config::isInstalled()) {
     exit;
 }
 
-ini_set('session.cookie_httponly', '1');
-ini_set('session.cookie_samesite', 'Strict');
+// gc_maxlifetime is still configured here because it's a runtime
+// setting; cookie params moved into Session::start().
 ini_set('session.gc_maxlifetime', '28800');
-// Isolated session per installation (prevents cross-login between instances on the same domain)
-session_name('tp_' . substr(hash('sha256', TELEPAGE_ROOT), 0, 16));
-session_start();
+Session::start();
 
 if (empty($_SESSION['admin_logged_in'])) {
     header('Location: login.php');

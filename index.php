@@ -12,11 +12,12 @@ define('TELEPAGE_ROOT', __DIR__);
 require_once TELEPAGE_ROOT . '/app/bootstrap.php';
 Bootstrap::init(Bootstrap::MODE_HTML);
 
-// Cache e sessione PRIMA di qualsiasi output
-ini_set('session.cookie_httponly', '1');
-ini_set('session.cookie_samesite', 'Strict');
-session_name('tp_' . substr(hash('sha256', TELEPAGE_ROOT), 0, 16));
-session_start();
+require_once TELEPAGE_ROOT . '/app/Security/Session.php';
+
+// Sessione PRIMA di qualsiasi output — delegata a Session::start()
+// per applicare Secure/HttpOnly/SameSite=Lax in modo coerente con il
+// resto del codice (vedi A1 / app/Security/Session.php).
+Session::start();
 
 // No-cache: forza sempre contenuto fresco (sidebar admin, tag aggiornati)
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0, post-check=0, pre-check=0');

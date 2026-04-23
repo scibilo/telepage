@@ -28,7 +28,15 @@ DirectoryIndex index.php
     Header always set X-Frame-Options "SAMEORIGIN"
     Header always set X-Content-Type-Options "nosniff"
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
-    Header always set X-XSS-Protection "1; mode=block"
+
+    # HSTS — emesso solo su HTTPS (un browser ignorerebbe comunque l'header
+    # su HTTP, ma evitiamo il rumore e non introduciamo side-effect in locale).
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" env=HTTPS
+
+    # Permissions-Policy: Telepage non usa nessuna di queste API; la policy
+    # più restrittiva le disabilita tutte, riducendo la superficie di
+    # attacco se mai dovessero comparire via terze-parti (embed, iframe).
+    Header always set Permissions-Policy "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=(), interest-cohort=()"
     <FilesMatch "\.(css|js|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf)$">
         Header set Cache-Control "max-age=86400, public"
     </FilesMatch>

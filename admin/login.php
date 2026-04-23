@@ -21,6 +21,7 @@ Bootstrap::init(Bootstrap::MODE_HTML);
 require_once TELEPAGE_ROOT . '/app/Config.php';
 require_once TELEPAGE_ROOT . '/app/DB.php';
 require_once TELEPAGE_ROOT . '/app/Logger.php';
+require_once TELEPAGE_ROOT . '/app/Security/Session.php';
 
 // If not installed, redirect to setup wizard
 if (!Config::isInstalled()) {
@@ -28,13 +29,8 @@ if (!Config::isInstalled()) {
     exit;
 }
 
-// Configure secure session
-ini_set('session.cookie_httponly', '1');
-ini_set('session.cookie_samesite', 'Strict');
 ini_set('session.gc_maxlifetime', '28800'); // 8 hours
-// Isolated session per installation (prevents cross-login between instances on the same domain)
-session_name('tp_' . substr(hash('sha256', TELEPAGE_ROOT), 0, 16));
-session_start();
+Session::start();
 
 // Already logged in?
 if (!empty($_SESSION['admin_logged_in']) && !empty($_SESSION['admin_user'])) {

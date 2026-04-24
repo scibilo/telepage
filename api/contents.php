@@ -48,20 +48,78 @@ if (!Config::isInstalled()) {
 }
 
 // -----------------------------------------------------------------------
-// Input parameters (sanitised)
+// Input parameters (sanitised + validated)
 // -----------------------------------------------------------------------
+//
+// Every query parameter is clamped or whitelisted before it reaches
+// the SQL layer. Nothing here is unsafe against injection (all values
+// go through PDO named placeholders below), but without caps an
+// attacker with authenticated or unauthenticated access to this
+// endpoint can amplify a single HTTP request into arbitrarily heavy
+// database work:
+//
+//   GET /api/contents.php?q=<100KB of 'A'>
+//     → '%<100KB>%' LIKE scan across three columns
+//
+// Rate limit above (60 req/min/IP) bounds the frequency; these caps
+// bound the per-request work. Both layers are needed.
+//
+// Invalid values (tag with punctuation, type not in the enum, date
+// not matching yyyy-mm-dd) are silently dropped rather than 400'd —
+// legitimate callers don't hit this path, and 400 would give
+// fingerprinting signal to probes.
+
+const MAX_SEARCH_LEN = 100;     // 'ristrutturazione edilizia 2024' style queries
+const MAX_TAG_LEN    = 50;      // matches tags table slug cap
+
+// Whitelist of content types emitted by Scraper::detectContentType()
+// and TelegramBot::resolveMedia(). Anything else is not a real type
+// in this install.
+const CONTENT_TYPE_ENUM = [
+    'link', 'photo', 'video', 'document', 'note',
+    'youtube', 'tiktok', 'instagram', 'telegram_post',
+];
 
 $config  = Config::get();
 $page    = max(1, (int) ($_GET['page'] ?? 1));
 $perPage = min(96, max(1, (int) ($_GET['per_page'] ?? $config['items_per_page'] ?? 12)));
 $offset  = ($page - 1) * $perPage;
 
-$search   = trim($_GET['q']        ?? '');
-$tagSlug  = trim($_GET['tag']      ?? '');
-$typeFilter = trim($_GET['type']   ?? '');
-$dateFrom   = trim($_GET['from']   ?? '');
-$dateTo     = trim($_GET['to']     ?? '');
-$semantic   = ((int) ($_GET['semantic'] ?? 0)) === 1;
+// Search: clamp length, strip control chars (would only ever reach here
+// from a handcrafted request — browsers don't emit them).
+$search = trim((string) ($_GET['q'] ?? ''));
+if ($search !== '') {
+    $search = preg_replace('/[\x00-\x1F\x7F]/u', ' ', $search) ?? $search;
+    $search = mb_strimwidth($search, 0, MAX_SEARCH_LEN, '', 'UTF-8');
+}
+
+// Tag: must look like a slug (lowercase alnum + dash + underscore).
+// Str::slugify()'s output always matches this. Anything else means a
+// caller sending us something we'd never ourselves produce.
+$tagSlug = trim((string) ($_GET['tag'] ?? ''));
+if ($tagSlug !== '' && !preg_match('/^[a-z0-9_-]{1,' . MAX_TAG_LEN . '}$/', $tagSlug)) {
+    $tagSlug = '';
+}
+
+// Type: whitelist of the enum actually used in the DB.
+$typeFilter = trim((string) ($_GET['type'] ?? ''));
+if ($typeFilter !== '' && !in_array($typeFilter, CONTENT_TYPE_ENUM, true)) {
+    $typeFilter = '';
+}
+
+// Dates: ISO yyyy-mm-dd only. We don't fight off an obviously wrong
+// year like 9999-12-31 here — the query still parametrises, just
+// returns nothing — but we do block arbitrary-length strings.
+$dateFrom = trim((string) ($_GET['from'] ?? ''));
+if ($dateFrom !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom)) {
+    $dateFrom = '';
+}
+$dateTo = trim((string) ($_GET['to'] ?? ''));
+if ($dateTo !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo)) {
+    $dateTo = '';
+}
+
+$semantic = ((int) ($_GET['semantic'] ?? 0)) === 1;
 
 // -----------------------------------------------------------------------
 // Build query

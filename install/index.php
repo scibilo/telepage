@@ -142,6 +142,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isInstalled) {
         $_SESSION['install']['bot_token']      = $botToken;
         $_SESSION['install']['channel_id']     = $channelId;
         $_SESSION['install']['webhook_secret'] = bin2hex(random_bytes(24));
+        $_SESSION['install']['cron_secret']    = bin2hex(random_bytes(24));
         $_SESSION['install']['gemini_api_key'] = trim($_POST['gemini_api_key'] ?? '');
         header('Location: index.php?step=4');
         exit;
@@ -304,6 +305,7 @@ function finalizeInstallation(): array {
         'app_name' => $sess['app_name'], 'theme_color' => $sess['theme_color'],
         'db_path' => $dbPath, 'telegram_bot_token' => $sess['bot_token'],
         'telegram_channel_id' => $sess['channel_id'], 'webhook_secret' => $sess['webhook_secret'],
+        'cron_secret' => $sess['cron_secret'],
         'language' => $sess['site_language'], 'installed' => true,
         'gemini_api_key' => $sess['gemini_api_key'] ?? '',
         'ai_enabled' => !empty($sess['gemini_api_key']),

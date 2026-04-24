@@ -55,6 +55,7 @@ $config = [
     'telegram_bot_token'  => '0000000000:DEV_FAKE_TOKEN_DO_NOT_USE',
     'telegram_channel_id' => '-1000000000000',
     'webhook_secret'      => bin2hex(random_bytes(24)),
+    'cron_secret'         => bin2hex(random_bytes(24)),
     'language'            => 'en',
     'installed'           => true,
     'gemini_api_key'      => '',

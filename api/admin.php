@@ -297,12 +297,17 @@ function actionUploadLogo(): void
     $mime = mime_content_type($file['tmp_name']);
     if (!str_starts_with($mime, 'image/')) jsonError(400, 'The file is not a valid image');
 
-    // Resize with GD
+    // GD is required. Before this check, a missing GD extension used
+    // to fall through to a bare move_uploaded_file() with only a
+    // mime_content_type() guard — bypassable with a polyglot image
+    // (a valid GIF/PNG header containing PHP/HTML after the marker).
+    // Though the destination extension is .png (and assets/img/ is
+    // not PHP-executable on a correctly-configured host), the invariant
+    // 'only re-encoded images land on disk' was broken. Better to
+    // surface the missing dependency loudly than to silently degrade
+    // to a weaker validation.
     if (!extension_loaded('gd')) {
-        // Fallback: plain copy if GD is unavailable
-        $dest = 'assets/img/logo.png';
-        move_uploaded_file($file['tmp_name'], TELEPAGE_ROOT . '/' . $dest);
-        jsonOk(['path' => $dest, 'note' => 'GD not available, file copied without resizing']);
+        jsonError(501, 'Server is missing the GD extension; logo upload is disabled. Install php-gd to enable.');
     }
 
     $src = null;
@@ -763,7 +768,18 @@ function actionSaveContent(): void
         jsonOk(['id' => $id]);
     } catch (Throwable $e) {
         DB::rollBack();
-        jsonError(500, 'Save error: ' . $e->getMessage());
+        // Do not echo $e->getMessage() to the client — on DB exceptions
+        // it can include the SQLite file path, partial SQL text, or
+        // column names, which are fingerprintable info about the
+        // installation. Full detail goes to the admin log where an
+        // operator can see it; the client gets a generic signal.
+        Logger::admin(Logger::ERROR, 'save_content failed', [
+            'id'   => $id ?? null,
+            'exc'  => get_class($e),
+            'msg'  => $e->getMessage(),
+            'file' => basename($e->getFile()) . ':' . $e->getLine(),
+        ]);
+        jsonError(500, 'Save failed — see admin log for details');
     }
 }
 

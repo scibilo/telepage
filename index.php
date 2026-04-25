@@ -9,10 +9,14 @@ declare(strict_types=1);
 
 define('TELEPAGE_ROOT', __DIR__);
 
-require_once TELEPAGE_ROOT . '/app/bootstrap.php';
-Bootstrap::init(Bootstrap::MODE_HTML);
+// Composer autoload — replaces the per-file require_once chain.
+// Loads classes (Config, DB, Str, Bootstrap, Session, ...) on first
+// access via classmap, plus app/Http.php on every request via the
+// 'files' autoload section (it defines top-level functions, not a
+// class).
+require_once TELEPAGE_ROOT . '/vendor/autoload.php';
 
-require_once TELEPAGE_ROOT . '/app/Security/Session.php';
+Bootstrap::init(Bootstrap::MODE_HTML);
 
 // Sessione PRIMA di qualsiasi output — delegata a Session::start()
 // per applicare Secure/HttpOnly/SameSite=Lax in modo coerente con il
@@ -26,10 +30,6 @@ header('Expires: Thu, 01 Jan 1970 00:00:00 GMT');
 header('Surrogate-Control: no-store'); // Varnish/CDN
 header('X-Accel-Expires: 0');          // Nginx proxy cache
 header('Vary: Cookie, Accept-Encoding'); // LiteSpeed/Cloudflare
-
-require_once TELEPAGE_ROOT . '/app/Config.php';
-require_once TELEPAGE_ROOT . '/app/DB.php';
-require_once TELEPAGE_ROOT . '/app/Str.php';
 
 // Se non installato, vai al wizard
 if (!Config::isInstalled()) {

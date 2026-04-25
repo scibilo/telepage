@@ -7,7 +7,7 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/../app/Str.php';
+require_once __DIR__ . '/../vendor/autoload.php';
 
 $failures = 0;
 function assertEq(string $actual, string $expected, string $label): void {

@@ -30,7 +30,7 @@ if (PHP_SAPI !== 'cli') {
     die("This script must be run from the command line.\n");
 }
 
-require_once TELEPAGE_ROOT . '/app/Config.php';
+require_once TELEPAGE_ROOT . '/vendor/autoload.php';
 
 if (!Config::isInstalled()) {
     die("Telepage is not installed yet. Run the install wizard first.\n");

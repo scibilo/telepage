@@ -1,7 +1,7 @@
 <?php
 define('TELEPAGE_ROOT', dirname(__DIR__));
 require_once __DIR__ . '/_auth.php';
-require_once TELEPAGE_ROOT . '/app/TelegramBot.php';
+// TelegramBot, Config, DB ecc. sono già caricati via Composer autoload da _auth.php.
 
 $stats = [];
 try {

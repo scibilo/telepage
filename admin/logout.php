@@ -3,10 +3,8 @@
  * TELEPAGE — admin/logout.php
  */
 define('TELEPAGE_ROOT', dirname(__DIR__));
-require_once TELEPAGE_ROOT . '/app/bootstrap.php';
+require_once TELEPAGE_ROOT . '/vendor/autoload.php';
 Bootstrap::init(Bootstrap::MODE_HTML);
-require_once TELEPAGE_ROOT . '/app/Logger.php';
-require_once TELEPAGE_ROOT . '/app/Security/Session.php';
 
 Session::start();
 if (!empty($_SESSION['admin_user'])) {

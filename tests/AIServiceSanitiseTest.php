@@ -13,6 +13,14 @@ declare(strict_types=1);
 // AIService requires Config / DB / Logger / Str. Pull them in so the
 // class can load; the sanitise function itself doesn't touch any of
 // them, so we don't need a working DB connection or Config file.
+//
+// Note: this test uses direct require_once on Str.php and AIService.php
+// (NOT vendor/autoload.php) because the shims below dynamically declare
+// Config/DB/Logger if missing. With Composer's autoloader active, those
+// classes would be eagerly loaded by AIService.php's references, then
+// the shims would fail with 'Cannot redeclare class'. Direct require
+// keeps the load order under our control. Future PHPUnit migration
+// (audit C2) will replace shims with proper test doubles.
 require_once __DIR__ . '/../app/Str.php';
 require_once __DIR__ . '/../app/AIService.php';
 // Shims for classes referenced only by other methods of AIService.

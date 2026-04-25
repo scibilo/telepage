@@ -1,7 +1,7 @@
 <?php
 define('TELEPAGE_ROOT', dirname(__DIR__));
 require_once __DIR__ . '/_auth.php';
-require_once TELEPAGE_ROOT . '/app/HistoryScanner.php';
+// HistoryScanner is autoloaded via Composer.
 
 $stats = HistoryScanner::getStats();
 

@@ -44,9 +44,7 @@ if (PHP_SAPI !== 'cli') {
 
 define('TELEPAGE_ROOT', dirname(__DIR__));
 
-require_once TELEPAGE_ROOT . '/app/Config.php';
-require_once TELEPAGE_ROOT . '/app/DB.php';
-require_once TELEPAGE_ROOT . '/app/Str.php';
+require_once TELEPAGE_ROOT . '/vendor/autoload.php';
 
 // -----------------------------------------------------------------------
 // Args

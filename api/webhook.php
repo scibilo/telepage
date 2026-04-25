@@ -14,14 +14,9 @@ declare(strict_types=1);
 // Defines project root (2 levels up: api/ → telepage/)
 define('TELEPAGE_ROOT', dirname(__DIR__));
 
-require_once TELEPAGE_ROOT . '/app/bootstrap.php';
-Bootstrap::init(Bootstrap::MODE_JSON);
+require_once TELEPAGE_ROOT . '/vendor/autoload.php';
 
-require_once TELEPAGE_ROOT . '/app/Config.php';
-require_once TELEPAGE_ROOT . '/app/DB.php';
-require_once TELEPAGE_ROOT . '/app/Logger.php';
-require_once TELEPAGE_ROOT . '/app/Scraper.php';
-require_once TELEPAGE_ROOT . '/app/TelegramBot.php';
+Bootstrap::init(Bootstrap::MODE_JSON);
 
 // -----------------------------------------------------------------------
 // Validate secret token BEFORE any other operation
@@ -146,7 +141,6 @@ try {
     
     // If the ID is valid and AI is enabled, process immediately (we are already in background)
     if ($contentId && ($config['ai_enabled'] ?? false)) {
-        require_once TELEPAGE_ROOT . '/app/AIService.php';
         AIService::processContent($contentId);
     }
 } catch (Throwable $e) {

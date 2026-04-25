@@ -87,6 +87,18 @@ DirectoryIndex index.php
 
     # Blocca accesso diretto a directives/
     RewriteRule ^directives/ - [F,L]
+
+    # Blocca accesso diretto a vendor/ (Composer dependencies, mai
+    # serviti via HTTP ma protetti per difesa in profondità).
+    RewriteRule ^vendor/ - [F,L]
+
+    # Blocca accesso diretto a app/ (codice applicativo, dovrebbe
+    # essere caricato solo via require dagli entry-point).
+    RewriteRule ^app/ - [F,L]
+
+    # Blocca accesso diretto a tests/ e bin/ (script CLI, mai web).
+    RewriteRule ^tests/ - [F,L]
+    RewriteRule ^bin/ - [F,L]
 </IfModule>
 
 # -----------------------------------------------------------------------

@@ -13,13 +13,9 @@ declare(strict_types=1);
 
 define('TELEPAGE_ROOT', dirname(__DIR__));
 
-require_once TELEPAGE_ROOT . '/app/bootstrap.php';
-Bootstrap::init(Bootstrap::MODE_JSON);
+require_once TELEPAGE_ROOT . '/vendor/autoload.php';
 
-require_once TELEPAGE_ROOT . '/app/Config.php';
-require_once TELEPAGE_ROOT . '/app/DB.php';
-require_once TELEPAGE_ROOT . '/app/Http.php';
-require_once TELEPAGE_ROOT . '/app/Logger.php';
+Bootstrap::init(Bootstrap::MODE_JSON);
 
 header('Content-Type: application/json; charset=UTF-8');
 header('Access-Control-Allow-Origin: *'); // Public API

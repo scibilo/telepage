@@ -1,0 +1,27 @@
+{
+    "name": "scibilo/telepage",
+    "description": "Self-hosted PHP app that publishes Telegram channels as navigable websites.",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.1",
+        "ext-pdo_sqlite": "*",
+        "ext-curl": "*",
+        "ext-mbstring": "*",
+        "ext-json": "*"
+    },
+    "require-dev": {
+    },
+    "autoload": {
+        "classmap": [
+            "app/"
+        ],
+        "files": [
+            "app/Http.php"
+        ]
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true
+    }
+}

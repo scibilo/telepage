@@ -1,5 +1,7 @@
 # 📡 Telepage — Turn Your Telegram Channel into a Website
 
+[![CI](https://github.com/scibilo/telepage/actions/workflows/ci.yml/badge.svg)](https://github.com/scibilo/telepage/actions/workflows/ci.yml)
+
 **Transform any Telegram channel into a fast, searchable, SEO-friendly website — in under 5 minutes.**
 
 No MySQL. No Node.js. Works on any shared hosting with PHP 8.1+.

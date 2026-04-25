@@ -18,6 +18,7 @@ Bootstrap::init(Bootstrap::MODE_JSON);
 
 require_once TELEPAGE_ROOT . '/app/Config.php';
 require_once TELEPAGE_ROOT . '/app/DB.php';
+require_once TELEPAGE_ROOT . '/app/Http.php';
 require_once TELEPAGE_ROOT . '/app/Logger.php';
 
 header('Content-Type: application/json; charset=UTF-8');
@@ -262,59 +263,5 @@ echo json_encode([
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
 // -----------------------------------------------------------------------
-// Helpers
+// Helpers — moved to app/Http.php so api/health.php can share them.
 // -----------------------------------------------------------------------
-
-function checkPublicRateLimit(string $ip): bool
-{
-    try {
-        $endpoint = 'public_api';
-        $rec = DB::fetchOne(
-            'SELECT hit_count, window_start FROM rate_limits WHERE ip=:ip AND endpoint=:ep',
-            [':ip' => $ip, ':ep' => $endpoint]
-        );
-
-        $now = time();
-
-        if ($rec) {
-            $age = $now - (int) $rec['window_start'];
-            if ($age > 60) {
-                DB::query(
-                    'UPDATE rate_limits SET hit_count=1, window_start=:now WHERE ip=:ip AND endpoint=:ep',
-                    [':now' => $now, ':ip' => $ip, ':ep' => $endpoint]
-                );
-                return true;
-            }
-            if ((int) $rec['hit_count'] >= 60) {
-                return false;
-            }
-            DB::query(
-                'UPDATE rate_limits SET hit_count=hit_count+1 WHERE ip=:ip AND endpoint=:ep',
-                [':ip' => $ip, ':ep' => $endpoint]
-            );
-        } else {
-            DB::query(
-                'INSERT INTO rate_limits (ip, endpoint, hit_count, window_start) VALUES (:ip,:ep,1,:now)',
-                [':ip' => $ip, ':ep' => $endpoint, ':now' => $now]
-            );
-        }
-
-        return true;
-    } catch (Throwable) {
-        return true;
-    }
-}
-
-function clientIp(): string
-{
-    foreach (['HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP', 'REMOTE_ADDR'] as $h) {
-        $v = $_SERVER[$h] ?? '';
-        if ($v) {
-            $ip = trim(explode(',', $v)[0]);
-            if (filter_var($ip, FILTER_VALIDATE_IP)) {
-                return $ip;
-            }
-        }
-    }
-    return '0.0.0.0';
-}

@@ -46,3 +46,7 @@ Thumbs.db
 # vendor/ is generated locally and bundled in the deployment artifact;
 # never committed. composer.lock IS committed (locks dependency versions).
 vendor/
+
+# PHPUnit cache
+.phpunit.cache/
+.phpunit.result.cache

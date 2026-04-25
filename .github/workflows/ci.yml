@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main, '**']
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: PHP ${{ matrix.php-version }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # 8.1 is the floor declared in composer.json (require.php).
+        # 8.3 is the version production runs on (Apache 2.4 / Ubuntu 24).
+        # Adding 8.2 in the middle catches breakage in either direction
+        # without a meaningful cost — each job is ~30s.
+        php-version: ['8.1', '8.2', '8.3']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          extensions: pdo_sqlite, curl, mbstring, json
+          coverage: none
+          # Enables `composer test` and friends without a separate
+          # composer install step in the YAML.
+          tools: composer:v2
+
+      # Lint pass first: cheap, runs in seconds, catches the kind of
+      # syntax error that would otherwise crash phpunit's bootstrap and
+      # produce a less useful failure message.
+      - name: Lint all PHP files
+        run: |
+          find app api admin install bin tests index.php -type f -name '*.php' \
+            -print0 | xargs -0 -n1 php -l | grep -v '^No syntax errors' || true
+          # The line above prints any error but does NOT fail the step;
+          # the `true` keeps the exit code green so we can see ALL the
+          # errors in one run instead of stopping at the first. The
+          # next step actually fails the build if any error was printed.
+
+      - name: Fail on lint errors
+        run: |
+          ERRORS=$(find app api admin install bin tests index.php -type f -name '*.php' \
+            -print0 | xargs -0 -n1 php -l 2>&1 | grep -v '^No syntax errors' || true)
+          if [ -n "$ERRORS" ]; then
+            echo "::error::PHP lint errors detected:"
+            echo "$ERRORS"
+            exit 1
+          fi
+
+      - name: Validate composer.json
+        run: composer validate --strict --no-check-publish
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ matrix.php-version }}-${{ hashFiles('composer.lock') }}
+          restore-keys: |
+            composer-${{ matrix.php-version }}-
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress --no-interaction
+
+      - name: Run PHPUnit
+        run: composer test

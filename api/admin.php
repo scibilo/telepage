@@ -798,15 +798,50 @@ function actionImportJson(): void
         jsonError(400, 'File not received or upload error');
     }
 
+    // Body size cap.
+    //
+    // file_get_contents() below loads the entire file into memory in
+    // one allocation, then json_decode() builds a parsed structure
+    // that typically takes 1.5–3× the source bytes again. A 200 MB
+    // Telegram export thus needs ~600–800 MB of headroom and crashes
+    // any Apache worker with a normal memory_limit (128M default).
+    //
+    // 50 MB is enough for any legitimate Telegram export from a small-
+    // to-medium channel; very large channels (multi-year, many media
+    // posts) should split the export by date range in Telegram Desktop
+    // before importing here. A real fix would stream the JSON, but
+    // PHP has no native streaming parser and Telepage has no Composer
+    // dependency yet (see C1 in the audit) — file size cap is the
+    // practical mitigation today.
+    //
+    // Two checks: PHP's reported $file['size'] (cheap, comes from
+    // multipart headers) AND a post-read strlen() (defends against
+    // a malformed multipart or a TOCTOU between size report and
+    // actual file content).
+    $maxImportBytes = 50 * 1024 * 1024;
+
+    if (($file['size'] ?? 0) > $maxImportBytes) {
+        jsonError(413, 'File too large (max ' . (int)($maxImportBytes / 1024 / 1024) . ' MB). Split the export by date range in Telegram Desktop and import in batches.');
+    }
+
     // Verify actual MIME type
     $mime = mime_content_type($file['tmp_name']);
     if (!in_array($mime, ['application/json', 'text/plain', 'text/json'])) {
         jsonError(400, "Invalid file type: {$mime}. Please upload a .json file");
     }
 
-    // Read and parse
-    $raw  = file_get_contents($file['tmp_name']);
+    // Read and parse — bounded read; offset 0, length cap+1 to detect
+    // a multipart that lied about its size in the headers.
+    $raw = file_get_contents($file['tmp_name'], false, null, 0, $maxImportBytes + 1);
+    if ($raw === false) {
+        jsonError(500, 'Could not read uploaded file');
+    }
+    if (strlen($raw) > $maxImportBytes) {
+        jsonError(413, 'File too large (max ' . (int)($maxImportBytes / 1024 / 1024) . ' MB). Split the export by date range in Telegram Desktop and import in batches.');
+    }
+
     $data = json_decode($raw, true);
+    unset($raw); // release the source bytes before traversing $data
     if (!is_array($data) || !isset($data['messages'])) {
         jsonError(400, 'Invalid JSON file or not a Telegram Desktop export');
     }

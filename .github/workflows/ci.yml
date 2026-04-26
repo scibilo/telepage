@@ -75,3 +75,11 @@ jobs:
 
       - name: Run PHPUnit
         run: composer test
+
+      - name: Run PHPStan
+        # Static analysis runs ONLY on PHP 8.3 — phpstan itself is
+        # PHP-version-aware and will already check 8.1 syntax via the
+        # phpVersion config, so running it on every matrix entry would
+        # just triplicate the same work.
+        if: matrix.php-version == '8.3'
+        run: composer phpstan

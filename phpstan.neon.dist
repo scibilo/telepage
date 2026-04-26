@@ -1,0 +1,38 @@
+parameters:
+    level: 5
+
+    paths:
+        - app
+
+    # Bootstrap so PHPStan knows the autoloader's classmap. Without this
+    # PHPStan can't resolve "Bootstrap", "Config", "DB", etc. and would
+    # report 'class not found' for every internal call.
+    #
+    # phpstan-stubs.php declares runtime constants (TELEPAGE_ROOT) that
+    # every entry-point sets via define() before loading app/ files.
+    # PHPStan analyses app/ files in isolation, so it needs the stub
+    # loaded as bootstrap (not as a stubFile — stubFiles are read for
+    # type info but don't EXECUTE define()).
+    bootstrapFiles:
+        - vendor/autoload.php
+        - phpstan-stubs.php
+
+    # Excluded paths inside the analysed dirs.
+    # bootstrap.php is a singleton-style configurator for error handlers
+    # and superglobals; analysing it triggers a lot of edge-case warnings
+    # that don't reflect bugs (e.g. set_error_handler signature
+    # variations across PHP versions). Worth revisiting once we tighten
+    # error handling separately.
+    excludePaths:
+        analyseAndScan:
+            - app/bootstrap.php
+
+    # Treat any phpDoc that lies as an error. Docs go stale fast on a
+    # codebase that doesn't run a checker — better to know now.
+    treatPhpDocTypesAsCertain: true
+
+# Suppressed by baseline (see phpstan-baseline.neon).
+# As we fix items in the baseline, this file does not change — only
+# the baseline shrinks.
+includes:
+    - phpstan-baseline.neon

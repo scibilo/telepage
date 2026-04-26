@@ -65,7 +65,7 @@ class TelegramBot
                 'received_chat_id' => $chatId,
                 'expected'         => $configuredChannel,
             ]);
-            return false;
+            return null;
         }
 
         try {
@@ -84,7 +84,7 @@ class TelegramBot
     // Elaborazione post
     // -----------------------------------------------------------------------
 
-    private static function processPost(array $post, array $config): ?int
+    private static function processPost(array $post, array $config): int
     {
         $messageId = (int) ($post['message_id'] ?? 0);
         $chatId    = (string) ($post['chat']['id'] ?? '');
@@ -138,6 +138,10 @@ class TelegramBot
         }
 
         // --- Save to DB (upsert on telegram_message_id) ---
+        // upsertContent always returns the inserted/updated id; failure
+        // surfaces as a DB exception which propagates to handleUpdate's
+        // try/catch. The previous `if ($contentId === null)` branch was
+        // dead code (return type is int, not ?int) and is removed.
         $contentId = self::upsertContent(
             $meta,
             $messageId,
@@ -145,11 +149,6 @@ class TelegramBot
             $date,
             $config
         );
-
-        if ($contentId === null) {
-            Logger::webhook(Logger::ERROR, 'Upsert fallito', ['message_id' => $messageId]);
-            return null;
-        }
 
         // --- Save manual tags ---
         if (!empty($manualTags)) {
@@ -183,7 +182,7 @@ class TelegramBot
         string $chatId,
         int    $date,
         array  $config
-    ): ?int {
+    ): int {
         $aiProcessed = ($config['ai_auto_tag'] || $config['ai_auto_summary']) ? 0 : 1;
 
         // Check if already exists

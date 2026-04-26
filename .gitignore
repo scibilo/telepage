@@ -50,3 +50,6 @@ vendor/
 # PHPUnit cache
 .phpunit.cache/
 .phpunit.result.cache
+
+# PHPStan cache
+.phpstan.cache/

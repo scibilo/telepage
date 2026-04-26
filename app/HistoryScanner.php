@@ -615,7 +615,7 @@ class HistoryScanner
     private static function extractHashtags(string $text): array
     {
         preg_match_all('/#([a-zA-Z0-9_À-ÿ]+)/', $text, $m);
-        return $m[1] ?? [];
+        return $m[1];
     }
 
     private static function detectType(string $url, array $post): string

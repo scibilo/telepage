@@ -173,7 +173,7 @@ dominio (`admin_contents.php`, `admin_tags.php`, `admin_scanner.php`,
 `admin_system.php`) migliora leggibilità e testabilità. Nessun
 bug noto ma debito tecnico crescente.
 
-### C7. Settings into DB (M)
+### C7. Settings into DB (M) — **WON'T FIX (re-evaluated 2026-04)**
 
 Attualmente molti settings sono in `config.json`. `theme_color`,
 `items_per_page`, booleani AI potrebbero stare in una tabella
@@ -181,6 +181,48 @@ Attualmente molti settings sono in `config.json`. `theme_color`,
 flock ma DB è più pulito), eventi di cambio, audit log per chi
 ha cambiato cosa. Svantaggio: migration + cambio di pattern
 consolidato.
+
+**Re-valutazione (post C1-C5)**: l'item è stato chiuso come
+*won't fix* dopo aver mappato i call site reali di `Config`.
+Le motivazioni dell'audit originale non si sono rivelate
+abbastanza forti per giustificare il refactor:
+
+1. **Concurrency già risolta**. `Config::update()` usa un
+   `flock(LOCK_EX)` su `config.json.lock` con read-modify-write
+   atomico. `tests/ConfigConcurrencyTest.php` stressa 120 worker
+   concorrenti e tutti gli update sopravvivono. Spostare a DB
+   non aggiunge nulla qui — anzi sposterebbe il problema dal
+   filesystem (dove flock è ben capito) a SQLite (dove richiede
+   transazioni esplicite per risultati equivalenti).
+
+2. **Audit log non incluso nello scope**. L'audit originale
+   nominava "audit log per chi ha cambiato cosa" come motivazione,
+   ma il refactor proposto aggiungeva solo un campo `updated_at`
+   alla tabella `settings`, non un vero audit trail (che
+   richiederebbe una tabella `settings_history` separata). Senza
+   il log vero, il "vantaggio" si riduce a una colonna timestamp.
+
+3. **Schema bifurcato peggiora il modello**. Lasciare segreti
+   (`webhook_secret`, `cron_secret`, `gemini_api_key`) in
+   `config.json` per le ragioni che già conosciamo (mai esposti
+   via DB dump, separati dal data-plane) e spostare il resto in
+   DB introduce due API di lettura per due categorie diverse di
+   settings. 17 file fanno `Config::get()` oggi e leggono
+   liberamente l'array merged: cambiare quel contratto è una
+   superficie di rottura non banale per zero beneficio.
+
+4. **Costo/beneficio**. Stima 2-3 ore reali di refactor + test
+   + migration script. Lo stesso tempo investito in **B2 (FTS5)**
+   o **C6 (admin split)** chiude item con valore concreto
+   (search performance, code maintainability). C7 è puro
+   churning.
+
+**Conclusione**: l'item resta documentato qui per memoria
+storica. Se in futuro emerge un caso d'uso reale (es. multi-
+admin con audit trail richiesto, o settings frequentemente
+cambiati a runtime), riapriamo con scope più chiaro. Per ora
+`config.json` rimane il single source of truth per tutta la
+configurazione applicativa.
 
 ---
 

@@ -134,7 +134,7 @@ class AIService
     /**
      * cURL call to Gemini API.
      */
-    private static function callGemini(string $prompt, string $apiKey): ?array
+    private static function callGemini(string $prompt, string $apiKey): array
     {
         $payload = [
             'contents' => [['parts' => [['text' => $prompt]]]],

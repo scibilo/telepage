@@ -1,5 +1,76 @@
 # Changelog
 
+## [1.1.0] — 2026-05-04
+
+### Security (audit 2026-04 — all items closed)
+
+- **A1 — Secure session cookies** (`app/Security/Session.php`): extracted
+  `Session::start()` helper that sets `Secure`, `HttpOnly`, `SameSite=Lax`
+  on every session cookie consistently across all entry-points.
+- **A2 — Public API input validation** (`api/contents.php`): capped query
+  length, validated tag slug format, whitelisted content_type enum, enforced
+  date format on `from`/`to` parameters.
+- **A3 — Content-Security-Policy** (`.htaccess`): baseline CSP covering
+  `default-src 'self'`, `object-src 'none'`, `frame-ancestors 'self'`,
+  `form-action 'self'`, `base-uri 'self'`, `connect-src 'self'` plus
+  explicit allow-list for Google Fonts.
+- **A4 — Dedicated cron secret** (`api/cron.php`, `bin/generate-cron-secret.php`):
+  replaced reliance on `webhook_secret` with a separate `cron_secret`;
+  `X-Cron-Key` header required; migration script provided.
+- **A5 — Webhook body validation** (`api/webhook.php`): enforced
+  `Content-Type: application/json`, 1 MB body cap, rejected non-object
+  JSON payloads before processing.
+- **B1 — Import OOM cap** (`api/admin/contents.php`): 50 MB hard cap on
+  JSON import uploads (both reported size and actual read size).
+- **B3 — Error leak scrub** (`api/admin/contents.php`): removed stack
+  traces and internal path details from `save_content` error responses.
+- **B4 — GD required for logo upload** (`api/admin/system.php`): explicit
+  501 with helpful message if the `gd` extension is missing instead of
+  falling through to an unvalidated `move_uploaded_file`.
+- **B5 — Security headers hardening** (`.htaccess`): added HSTS
+  (`env=HTTPS`), `Permissions-Policy` disabling unused browser APIs,
+  removed deprecated `X-XSS-Protection`.
+- **B2 — FTS5 full-text search** (`app/DB.php`, `api/contents.php`,
+  `api/admin/contents.php`, `app/Http.php`, `bin/migrate-fts.php`):
+  replaced O(n) `LIKE '%q%'` table scan with an FTS5 virtual table +
+  three sync triggers. Existing installs: run `php bin/migrate-fts.php`.
+
+### Added
+
+- **Composer autoload** (`composer.json`, all entry-points): single
+  `require vendor/autoload.php` replaces per-file `require_once` chains.
+  Deploy: run `composer install --no-dev --optimize-autoloader` locally
+  and upload `vendor/` with the rest of the files (or use the release zip
+  which bundles `vendor/` pre-built).
+- **PHPUnit test suite** (`tests/Unit/`): 37 unit tests covering `Str`,
+  `CsrfGuard`, and `UrlValidator`. Run: `composer test`.
+- **GitHub Actions CI** (`.github/workflows/ci.yml`): lint + `composer
+  validate` + PHPUnit on PHP 8.1, 8.2, 8.3 on every push and PR.
+- **PHPStan static analysis** (`phpstan.neon.dist`): level 5, zero errors.
+  Run: `composer phpstan`. CI runs it on PHP 8.3.
+- **Health endpoint** (`api/health.php`): public `GET /api/health.php`
+  returns JSON with db/installed/webhook/ai_queue status. Rate-limited at
+  30 req/min. Separate rate-limit bucket from the public feed.
+- **Admin API modularised** (`api/admin/`): `api/admin.php` is now a thin
+  dispatcher (~100 lines). Action logic split into four domain modules:
+  `system.php`, `contents.php`, `tags.php`, `scanner.php`. Public URL
+  unchanged. `api/admin/` directory protected against direct HTTP access.
+- **Release build script** (`bin/build-release.sh`): generates a
+  deployment-ready zip with `vendor/` pre-built and dev/test files
+  excluded. Run: `bash bin/build-release.sh`.
+
+### Fixed (static analysis — found by PHPStan)
+
+- `AIService::callGemini()` declared `?array` but always returns `array`
+  or throws. Tightened to `array`.
+- `TelegramBot::handleUpdate()` had stale `return false` in a `?int`
+  method — channel mismatch silently became `0` for callers. Changed to
+  `return null`.
+- `TelegramBot::upsertContent()` declared `?int`, always returns `int`.
+- `TelegramBot::processPost()` cascade from above: `?int` → `int`.
+- `HistoryScanner::extractHashtags()` had dead `?? []` after
+  `preg_match_all` (PHP guarantees the capture-group offset exists).
+
 ## [1.0.4] — 2026-04-05
 
 ### Fixed

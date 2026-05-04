@@ -1,0 +1,5 @@
+# Deny direct HTTP access to admin module files.
+# These files are meant to be included by api/admin.php only.
+# Direct access would bypass all authentication, CSRF, and
+# rate-limit checks performed by the dispatcher.
+Require all denied

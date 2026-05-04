@@ -92,6 +92,11 @@ DirectoryIndex index.php
     # serviti via HTTP ma protetti per difesa in profondità).
     RewriteRule ^vendor/ - [F,L]
 
+    # Blocca accesso diretto a api/admin/ — i moduli admin sono
+    # inclusi dal dispatcher api/admin.php; l'accesso diretto
+    # bypassa tutta l'autenticazione, il CSRF e il rate limit.
+    RewriteRule ^api/admin/ - [F,L]
+
     # Blocca accesso diretto a app/ (codice applicativo, dovrebbe
     # essere caricato solo via require dagli entry-point).
     RewriteRule ^app/ - [F,L]

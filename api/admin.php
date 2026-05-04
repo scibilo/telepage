@@ -684,8 +684,8 @@ function actionContentsList(): void
     $where = ['1=1'];
     $params = [];
     if (!empty($search)) {
-        $where[] = '(title LIKE :q OR description LIKE :q)';
-        $params[':q'] = "%$search%";
+        $where[]      = 'id IN (SELECT rowid FROM contents_fts WHERE contents_fts MATCH :q)';
+        $params[':q'] = fts5EscapeQuery($search);
     }
 
     $whereSql = 'WHERE ' . implode(' AND ', $where);

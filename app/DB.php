@@ -209,6 +209,62 @@ class DB
                 PRIMARY KEY (ip, endpoint)
             );
         ");
+
+        // ---------------------------------------------------------------
+        // FTS5 virtual table + sync triggers.
+        //
+        // Executed separately because SQLite does not allow mixing DDL
+        // for regular tables and CREATE VIRTUAL TABLE in the same exec()
+        // call on all driver versions.
+        //
+        // content=contents tells FTS5 to use the contents table as the
+        // authoritative text source — no text duplication on disk, just
+        // the inverted index. content_rowid=id links FTS rowids to
+        // contents.id so MATCH queries return usable ids directly.
+        //
+        // The three triggers (ai/ad/au) keep the index in sync with
+        // every INSERT, DELETE, or UPDATE on contents. Without triggers
+        // the index would silently go stale.
+        //
+        // IF NOT EXISTS on CREATE VIRTUAL TABLE and on each trigger
+        // means this method is safe to call repeatedly (already the
+        // contract for the rest of initSchema).
+        // ---------------------------------------------------------------
+        $pdo->exec("
+            CREATE VIRTUAL TABLE IF NOT EXISTS contents_fts USING fts5(
+                title,
+                description,
+                ai_summary,
+                content=contents,
+                content_rowid=id
+            );
+        ");
+
+        $pdo->exec("
+            CREATE TRIGGER IF NOT EXISTS contents_fts_ai
+            AFTER INSERT ON contents BEGIN
+                INSERT INTO contents_fts(rowid, title, description, ai_summary)
+                VALUES (new.id, new.title, new.description, new.ai_summary);
+            END;
+        ");
+
+        $pdo->exec("
+            CREATE TRIGGER IF NOT EXISTS contents_fts_ad
+            AFTER DELETE ON contents BEGIN
+                INSERT INTO contents_fts(contents_fts, rowid, title, description, ai_summary)
+                VALUES ('delete', old.id, old.title, old.description, old.ai_summary);
+            END;
+        ");
+
+        $pdo->exec("
+            CREATE TRIGGER IF NOT EXISTS contents_fts_au
+            AFTER UPDATE ON contents BEGIN
+                INSERT INTO contents_fts(contents_fts, rowid, title, description, ai_summary)
+                VALUES ('delete', old.id, old.title, old.description, old.ai_summary);
+                INSERT INTO contents_fts(rowid, title, description, ai_summary)
+                VALUES (new.id, new.title, new.description, new.ai_summary);
+            END;
+        ");
     }
 
     // -----------------------------------------------------------------------

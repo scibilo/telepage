@@ -125,10 +125,17 @@ $semantic = ((int) ($_GET['semantic'] ?? 0)) === 1;
 $where  = ['c.is_deleted = 0'];
 $params = [];
 
-// Full-text search on title, description, ai_summary
+// Full-text search via FTS5 virtual table (contents_fts).
+// MATCH returns rowids which are the same as contents.id (content_rowid=id).
+// fts5EscapeQuery() wraps the term in double-quotes so it is treated as a
+// phrase by the FTS5 query parser, matching behaviour closest to the old
+// LIKE '%q%': "deep learning" finds rows containing that exact phrase, and
+// a single word finds rows containing that word anywhere in title /
+// description / ai_summary. The old LIKE searched all three columns in OR;
+// FTS5 searches all indexed columns simultaneously with the same semantics.
 if ($search !== '') {
-    $where[]         = '(c.title LIKE :q OR c.description LIKE :q OR c.ai_summary LIKE :q)';
-    $params[':q']    = '%' . $search . '%';
+    $where[]      = 'c.id IN (SELECT rowid FROM contents_fts WHERE contents_fts MATCH :q)';
+    $params[':q'] = fts5EscapeQuery($search);
 }
 
 // Tag filter (JOIN)

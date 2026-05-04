@@ -95,3 +95,35 @@ if (!function_exists('clientIp')) {
         return '0.0.0.0';
     }
 }
+
+if (!function_exists('fts5EscapeQuery')) {
+
+    /**
+     * Escapes a user-supplied string for use as an FTS5 MATCH query.
+     *
+     * FTS5 uses a mini query language where double-quotes delimit phrases,
+     * asterisks are prefix operators, and bare terms are ANDed together.
+     * To match the old LIKE '%q%' semantics as closely as possible we wrap
+     * the entire input in double-quotes (phrase search), escaping any
+     * embedded double-quotes by doubling them (the FTS5 spec for quoted
+     * strings). This means:
+     *
+     *   "deep learning" → finds rows containing the phrase "deep learning"
+     *   "PHP"           → finds rows containing the word "PHP"
+     *
+     * One difference from LIKE: LIKE '%q%' matches substrings within words
+     * (e.g. LIKE '%lear%' matches "learning"), while FTS5 phrase search
+     * matches whole tokens. Tokenisation splits on whitespace and
+     * punctuation, so "learn" matches "learning" via the stemmer only if
+     * the unicode61 tokenizer is configured with stemming — which we do
+     * not configure here. For Telepage's typical content (URLs, titles,
+     * descriptions) whole-word matching is the right default: searching
+     * "PHP" should not match "PHPBB" or mid-word fragments.
+     */
+    function fts5EscapeQuery(string $query): string
+    {
+        // Escape embedded double-quotes by doubling them.
+        $escaped = str_replace('"', '""', $query);
+        return '"' . $escaped . '"';
+    }
+}

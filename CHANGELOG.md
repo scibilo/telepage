@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.1.3] — 2026-05-16
+
+### Added
+
+- **Exponential backoff for Gemini failures** (`app/AIService.php`,
+  `api/cron.php`): failed AI processing rows are now retried automatically
+  instead of being permanently marked `ai_processed=2`. Two new columns:
+  `ai_retry_count` (failure counter) and `next_retry_at` (scheduled retry
+  time). Backoff schedule: 5m → 15m → 60m → 360m (6h cap). The cron filter
+  respects `next_retry_at` so a bad row can't tarpit the queue. Migration:
+  `bin/migrate-v112.php`.
+
+## [1.1.2] — 2026-05-16
+
+### Fixed
+
+- **Telegram retry deduplication** (`app/DB.php`): added a partial unique
+  index on `(telegram_message_id, telegram_chat_id) WHERE telegram_message_id
+  IS NOT NULL`. Telegram retries a webhook that doesn't return 2xx quickly
+  enough; the unique index prevents duplicate rows at the DB layer. Migration:
+  `bin/migrate-v112.php`.
+
+- **Cron overlap protection** (`api/cron.php`): `BEGIN IMMEDIATE` + new
+  `ai_processing_since` column claims a batch atomically before processing.
+  A concurrent cron invocation sees claimed rows and skips them. Stale rows
+  (cron died mid-run) are auto-reset after 10 minutes. Migration:
+  `bin/migrate-v112.php`.
+
 ## [1.1.1] — 2026-05-16
 
 ### Fixed

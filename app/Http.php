@@ -101,29 +101,46 @@ if (!function_exists('fts5EscapeQuery')) {
     /**
      * Escapes a user-supplied string for use as an FTS5 MATCH query.
      *
-     * FTS5 uses a mini query language where double-quotes delimit phrases,
-     * asterisks are prefix operators, and bare terms are ANDed together.
-     * To match the old LIKE '%q%' semantics as closely as possible we wrap
-     * the entire input in double-quotes (phrase search), escaping any
-     * embedded double-quotes by doubling them (the FTS5 spec for quoted
-     * strings). This means:
+     * Strategy: split the input into individual tokens and AND them
+     * together. Each token is wrapped in double-quotes (FTS5 quoted-term
+     * syntax) so special characters (*, ", ^, etc.) are treated as
+     * literals rather than FTS5 operators.
      *
-     *   "deep learning" → finds rows containing the phrase "deep learning"
-     *   "PHP"           → finds rows containing the word "PHP"
+     * Examples:
+     *   "intelligenza"        → "intelligenza"
+     *   "deep learning"       → "deep" "learning"   (both words must appear)
+     *   "l'IA"                → "l" "IA"             (apostrophe splits)
+     *   "php*"                → "php*"               (star escaped, literal)
      *
-     * One difference from LIKE: LIKE '%q%' matches substrings within words
-     * (e.g. LIKE '%lear%' matches "learning"), while FTS5 phrase search
-     * matches whole tokens. Tokenisation splits on whitespace and
-     * punctuation, so "learn" matches "learning" via the stemmer only if
-     * the unicode61 tokenizer is configured with stemming — which we do
-     * not configure here. For Telepage's typical content (URLs, titles,
-     * descriptions) whole-word matching is the right default: searching
-     * "PHP" should not match "PHPBB" or mid-word fragments.
+     * This is closer to LIKE '%q%' semantics than wrapping the whole
+     * input in a single phrase (which requires the exact sequence of
+     * tokens in order). Word-by-word AND gives better recall for
+     * multi-word queries while still being safe against FTS5 injection.
+     *
+     * Empty tokens (from multiple spaces, punctuation runs) are dropped.
      */
     function fts5EscapeQuery(string $query): string
     {
-        // Escape embedded double-quotes by doubling them.
-        $escaped = str_replace('"', '""', $query);
-        return '"' . $escaped . '"';
+        // Strip control characters that could confuse the tokenizer.
+        $query = preg_replace('/[\x00-\x1F\x7F]/u', ' ', $query) ?? $query;
+
+        // Split on whitespace and common punctuation used as word separators
+        // in Italian/English content (apostrophe, dash, slash, etc.).
+        $tokens = preg_split('/[\s\'\-\/\\\\]+/u', trim($query), -1, PREG_SPLIT_NO_EMPTY);
+
+        if (empty($tokens)) {
+            // Fallback: return empty string — caller should check before querying.
+            return '';
+        }
+
+        // Wrap each token in double-quotes, escaping embedded double-quotes
+        // by doubling them (FTS5 quoted-string spec).
+        $parts = [];
+        foreach ($tokens as $token) {
+            if ($token === '') continue;
+            $parts[] = '"' . str_replace('"', '""', $token) . '"';
+        }
+
+        return implode(' ', $parts);
     }
 }

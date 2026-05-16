@@ -138,11 +138,17 @@ if (function_exists('fastcgi_finish_request')) {
 
 try {
     $contentId = TelegramBot::handleUpdate($update);
-    
-    // If the ID is valid and AI is enabled, process immediately (we are already in background)
-    if ($contentId && ($config['ai_enabled'] ?? false)) {
-        AIService::processContent($contentId);
-    }
+
+    // AI processing is intentionally NOT done here.
+    //
+    // Calling AIService::processContent() inline would block the webhook
+    // response for the duration of the Gemini API call (typically 1-5s).
+    // Telegram considers a webhook failed if it does not receive a 2xx
+    // within a few seconds and will retry — redelivering the same update
+    // and causing duplicate content or double-tagging.
+    //
+    // The cron endpoint (/api/cron.php) picks up rows with ai_processed=0
+    // on its own schedule. Set it up via: Settings → Cron in the admin.
 } catch (Throwable $e) {
     error_log('[TELEPAGE][WEBHOOK] ' . $e->getMessage());
 }

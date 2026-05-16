@@ -105,21 +105,76 @@ if ($keyFromQuery) {
 
 // -----------------------------------------------------------------------
 // 2. Process AI queue
+//
+// Overlap protection: two cron invocations running simultaneously
+// (e.g. a slow Gemini call causes the next cron tick to fire before
+// the previous one finishes) would both see ai_processed=0 rows and
+// process the same content twice.
+//
+// Fix: mark rows as "in progress" atomically with BEGIN IMMEDIATE
+// before processing them. BEGIN IMMEDIATE acquires a write lock
+// immediately, so a concurrent cron that tries the same UPDATE sees
+// the rows already claimed and gets an empty batch.
+//
+// ai_processing_since stores the timestamp of when processing started.
+// If a cron invocation dies mid-run (Gemini timeout, OOM, etc.) the
+// row stays at ai_processed=0 with a stale ai_processing_since. A
+// 10-minute staleness window resets it so the next cron can retry.
 // -----------------------------------------------------------------------
-$limit = 10; // Slightly larger batch for cron
+
+$limit       = 10;
+$staleMinutes = 10;
+$pdo         = DB::get();
+
+// Reset stale "in progress" rows (claimed but never finished).
+$pdo->exec(
+    "UPDATE contents
+     SET ai_processing_since = NULL
+     WHERE ai_processed = 0
+       AND is_deleted   = 0
+       AND ai_processing_since IS NOT NULL
+       AND ai_processing_since < datetime('now', '-{$staleMinutes} minutes')"
+);
+
+// Claim a batch atomically.
+$pdo->exec('BEGIN IMMEDIATE');
 $queue = DB::fetchAll(
-    'SELECT id FROM contents WHERE ai_processed=0 AND is_deleted=0 LIMIT :lim',
+    'SELECT id FROM contents
+     WHERE ai_processed = 0
+       AND is_deleted   = 0
+       AND ai_processing_since IS NULL
+     LIMIT :lim',
     [':lim' => $limit]
 );
 
+if (!empty($queue)) {
+    $ids = implode(',', array_column($queue, 'id'));
+    $pdo->exec(
+        "UPDATE contents
+         SET ai_processing_since = datetime('now')
+         WHERE id IN ({$ids})"
+    );
+}
+$pdo->exec('COMMIT');
+
+// Process the claimed rows.
 $processed = 0;
 foreach ($queue as $item) {
     if (AIService::processContent((int) $item['id'])) {
         $processed++;
     }
+    // Clear the processing lock whether it succeeded or failed —
+    // AIService::processContent() already sets ai_processed=1 or 2.
+    // We clear ai_processing_since so the column is tidy.
+    DB::query(
+        'UPDATE contents SET ai_processing_since = NULL WHERE id = :id',
+        [':id' => $item['id']]
+    );
 }
 
-$remaining = (int) DB::fetchScalar('SELECT COUNT(*) FROM contents WHERE ai_processed=0 AND is_deleted=0');
+$remaining = (int) DB::fetchScalar(
+    'SELECT COUNT(*) FROM contents WHERE ai_processed=0 AND is_deleted=0'
+);
 
 // -----------------------------------------------------------------------
 // 3. Response (for cron log)

@@ -127,9 +127,19 @@ class DB
                 telegram_chat_id    TEXT,
                 is_deleted          INTEGER DEFAULT 0,
                 ai_processed        INTEGER DEFAULT 0,
+                ai_processing_since DATETIME DEFAULT NULL,
                 created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at          DATETIME DEFAULT CURRENT_TIMESTAMP
             );
+
+            -- Unique constraint on (telegram_message_id, telegram_chat_id):
+            -- prevents duplicate rows if Telegram retries a webhook that
+            -- returned 200 too slowly. The upsert in TelegramBot already
+            -- does a SELECT first, but a DB-level constraint is the safe
+            -- belt-and-braces guarantee.
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_contents_tg_unique
+                ON contents(telegram_message_id, telegram_chat_id)
+                WHERE telegram_message_id IS NOT NULL;
 
             CREATE INDEX IF NOT EXISTS idx_contents_created ON contents(created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_contents_type    ON contents(content_type);

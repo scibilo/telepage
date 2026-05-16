@@ -91,12 +91,37 @@ class AIService
 
         } catch (Throwable $e) {
             Logger::ai(Logger::ERROR, 'Errore elaborazione AI', [
-                'id' => $contentId,
-                'error' => $e->getMessage()
+                'id'    => $contentId,
+                'error' => $e->getMessage(),
             ]);
-            
-            // Mark as error (ai_processed = 2)
-            DB::query('UPDATE contents SET ai_processed = 2 WHERE id = :id', [':id' => $contentId]);
+
+            // Exponential backoff: bump retry count and schedule next attempt.
+            // Backoff schedule: 5m → 15m → 60m → 360m (6h, cap).
+            // ai_processed stays 0 so the cron queue filter still picks it up
+            // once next_retry_at has passed. ai_processed=2 is reserved for
+            // permanent failures (currently unused — every error is retryable).
+            $backoffMinutes = [5, 15, 60, 360];
+            $row = DB::fetchOne(
+                'SELECT ai_retry_count FROM contents WHERE id = :id',
+                [':id' => $contentId]
+            );
+            $retryCount = (int) ($row['ai_retry_count'] ?? 0);
+            $minutes    = $backoffMinutes[min($retryCount, count($backoffMinutes) - 1)];
+
+            DB::query(
+                "UPDATE contents
+                 SET ai_retry_count  = ai_retry_count + 1,
+                     next_retry_at   = datetime('now', '+{$minutes} minutes')
+                 WHERE id = :id",
+                [':id' => $contentId]
+            );
+
+            Logger::ai(Logger::INFO, 'AI retry scheduled', [
+                'id'           => $contentId,
+                'retry_count'  => $retryCount + 1,
+                'retry_in_min' => $minutes,
+            ]);
+
             return false;
         }
     }

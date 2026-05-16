@@ -60,6 +60,30 @@ if (in_array('ai_processing_since', $cols, true)) {
 }
 
 // -----------------------------------------------------------------------
+// Step 1b — add ai_retry_count column if missing
+// -----------------------------------------------------------------------
+$log('Step 1b: adding ai_retry_count column…');
+$cols = $pdo->query('PRAGMA table_info(contents)')->fetchAll(PDO::FETCH_COLUMN, 1);
+if (in_array('ai_retry_count', $cols, true)) {
+    $log('         Already exists — skipping.');
+} else {
+    $pdo->exec('ALTER TABLE contents ADD COLUMN ai_retry_count INTEGER DEFAULT 0');
+    $log('         OK');
+}
+
+// -----------------------------------------------------------------------
+// Step 1c — add next_retry_at column if missing
+// -----------------------------------------------------------------------
+$log('Step 1c: adding next_retry_at column…');
+$cols = $pdo->query('PRAGMA table_info(contents)')->fetchAll(PDO::FETCH_COLUMN, 1);
+if (in_array('next_retry_at', $cols, true)) {
+    $log('         Already exists — skipping.');
+} else {
+    $pdo->exec('ALTER TABLE contents ADD COLUMN next_retry_at DATETIME DEFAULT NULL');
+    $log('         OK');
+}
+
+// -----------------------------------------------------------------------
 // Step 2 — add UNIQUE index on (telegram_message_id, telegram_chat_id)
 // -----------------------------------------------------------------------
 $log('Step 2: adding unique index on (telegram_message_id, telegram_chat_id)…');

@@ -130,10 +130,27 @@ class TelegramBot
                 'content_type' => $scraped['content_type'] ?? $contentType,
                 'source_domain'=> $scraped['source_domain'] ?? '',
             ]);
-            // Immagine: preferisci media Telegram, poi scraped
+            // Immagine: preferisci media Telegram, poi scraped.
+            // If download_media is enabled, download the scraped image
+            // to assets/media/ so it never expires (external URLs from
+            // TikTok, Instagram, etc. use signed tokens that become
+            // invalid within hours/days).
             if (empty($meta['image'])) {
-                $meta['image']        = $scraped['image'] ?? '';
-                $meta['image_source'] = $scraped['image_source'] ?? 'placeholder';
+                $scrapedImage = $scraped['image'] ?? '';
+                if (!empty($scrapedImage) && !empty($config['download_media'])) {
+                    $localPath = self::downloadExternalImage($scrapedImage, $config);
+                    if ($localPath !== '') {
+                        $meta['image']        = $localPath;
+                        $meta['image_source'] = 'downloaded';
+                    } else {
+                        // Download failed — keep the external URL as fallback.
+                        $meta['image']        = $scrapedImage;
+                        $meta['image_source'] = $scraped['image_source'] ?? 'scraped';
+                    }
+                } else {
+                    $meta['image']        = $scrapedImage;
+                    $meta['image_source'] = $scraped['image_source'] ?? 'placeholder';
+                }
             }
         }
 
@@ -615,5 +632,85 @@ class TelegramBot
         ]);
 
         return $resp['result'] ?? [];
+    }
+
+    /**
+     * Public wrapper for downloadExternalImage — used by admin Fix Images action.
+     */
+    public static function downloadExternalImagePublic(string $url, array $config): string
+    {
+        return self::downloadExternalImage($url, $config);
+    }
+
+    /**
+     * Downloads an external image URL (e.g. TikTok/Instagram OG thumbnail)
+     * to assets/media/ so it never expires. Returns the local relative path
+     * on success, or empty string on failure (caller falls back to external URL).
+     *
+     * Only called when download_media is enabled. Validates the URL through
+     * UrlValidator before fetching to prevent SSRF.
+     *
+     * @param string $url    The external image URL to download
+     * @param array  $config The current config array
+     * @return string        Relative path like 'assets/media/abc123.jpg', or ''
+     */
+    private static function downloadExternalImage(string $url, array $config): string
+    {
+        if (empty($url)) {
+            return '';
+        }
+
+        // SSRF protection — reuse the same validator used for webhook URLs.
+        if (!UrlValidator::isSafeToFetch($url)) {
+            Logger::scraper(Logger::WARNING, 'downloadExternalImage: SSRF blocked', ['url' => $url]);
+            return '';
+        }
+
+        $mediaDir = dirname(__DIR__) . '/assets/media';
+        if (!is_dir($mediaDir) && !mkdir($mediaDir, 0755, true)) {
+            return '';
+        }
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 10,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS      => 3,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_USERAGENT      => 'Mozilla/5.0 (compatible; Telepage/1.1)',
+        ]);
+
+        $body = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $mime = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+        curl_close($ch);
+
+        if ($body === false || $code !== 200) {
+            return '';
+        }
+
+        // Accept only image MIME types.
+        $mime = strtolower(explode(';', $mime)[0]);
+        $extMap = [
+            'image/jpeg' => 'jpg',
+            'image/jpg'  => 'jpg',
+            'image/png'  => 'png',
+            'image/webp' => 'webp',
+            'image/gif'  => 'gif',
+        ];
+        if (!isset($extMap[$mime])) {
+            return '';
+        }
+
+        $ext      = $extMap[$mime];
+        $filename = substr(md5($url), 0, 16) . '_' . time() . '.' . $ext;
+        $fullPath = $mediaDir . '/' . $filename;
+
+        if (file_put_contents($fullPath, $body) === false) {
+            return '';
+        }
+
+        return 'assets/media/' . $filename;
     }
 }

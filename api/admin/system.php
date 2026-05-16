@@ -258,13 +258,25 @@ function actionFixImages(): void
         [':lim' => $limit]
     );
 
-    $fixed = 0;
+    $fixed  = 0;
+    $config = Config::get();
     foreach ($rows as $row) {
         $meta = Scraper::fetch($row['url']);
         if (!empty($meta['image'])) {
+            $imgPath   = $meta['image'];
+            $imgSource = $meta['image_source'] ?? 'scraped';
+            // If download_media is enabled, persist the external image
+            // locally so it never expires (TikTok/Instagram signed URLs).
+            if (!empty($config['download_media']) && $imgSource === 'scraped') {
+                $local = TelegramBot::downloadExternalImagePublic($imgPath, $config);
+                if ($local !== '') {
+                    $imgPath   = $local;
+                    $imgSource = 'downloaded';
+                }
+            }
             DB::query(
                 'UPDATE contents SET image=:img, image_source=:src, updated_at=CURRENT_TIMESTAMP WHERE id=:id',
-                [':img' => $meta['image'], ':src' => $meta['image_source'], ':id' => $row['id']]
+                [':img' => $imgPath, ':src' => $imgSource, ':id' => $row['id']]
             );
             $fixed++;
         }

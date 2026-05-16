@@ -85,6 +85,7 @@ rsync -a \
     --exclude='.phpstan.cache' \
     --exclude='.phpunit.cache' \
     --exclude='.phpunit.result.cache' \
+    --exclude='telepage-v*.zip' \
     --exclude="${ZIPNAME}" \
     ./ "${SRCDIR}/"
 

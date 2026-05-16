@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.4] — 2026-05-16
+
+### Added
+
+- **Download external OG images locally** (`app/TelegramBot.php`,
+  `api/admin/system.php`): when `download_media` is enabled (Lite Mode off),
+  scraped `og:image` URLs (TikTok, Instagram, etc.) are now downloaded to
+  `assets/media/` at insert time instead of being stored as external URLs.
+  Fixes expiring thumbnails caused by signed CDN tokens. Falls back silently
+  to the external URL if the download fails (host unreachable, SSRF block,
+  non-image response). Also applied to the Fix Images admin action.
+  Note: shared hosting providers that block outbound HTTP to CDN IPs
+  (e.g. Aruba) will fall back to the external URL automatically.
+
 ## [1.1.3] — 2026-05-16
 
 ### Added

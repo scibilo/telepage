@@ -139,11 +139,12 @@ $pdo->exec(
 // Claim a batch atomically.
 $pdo->exec('BEGIN IMMEDIATE');
 $queue = DB::fetchAll(
-    'SELECT id FROM contents
+    "SELECT id FROM contents
      WHERE ai_processed = 0
        AND is_deleted   = 0
        AND ai_processing_since IS NULL
-     LIMIT :lim',
+       AND (next_retry_at IS NULL OR next_retry_at <= datetime('now'))
+     LIMIT :lim",
     [':lim' => $limit]
 );
 

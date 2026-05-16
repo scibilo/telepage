@@ -128,6 +128,8 @@ class DB
                 is_deleted          INTEGER DEFAULT 0,
                 ai_processed        INTEGER DEFAULT 0,
                 ai_processing_since DATETIME DEFAULT NULL,
+                ai_retry_count      INTEGER DEFAULT 0,
+                next_retry_at       DATETIME DEFAULT NULL,
                 created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at          DATETIME DEFAULT CURRENT_TIMESTAMP
             );

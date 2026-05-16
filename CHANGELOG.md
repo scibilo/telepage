@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.1.5] — 2026-05-16
+
+### Fixed
+
+- **FTS5 prefix search** (`app/Http.php`): searching for partial words
+  (e.g. "chatg", "intell") returned 0 results because FTS5 matches exact
+  tokens only. `fts5EscapeQuery()` now appends `*` to the last token so
+  partial words match while the user is typing: `chatg` → `"chatg"*` finds
+  chatgpt; `intell` → `"intell"*` finds intelligenza. All tokens except the
+  last remain exact matches.
+
 ## [1.1.4] — 2026-05-16
 
 ### Added

@@ -106,16 +106,19 @@ if (!function_exists('fts5EscapeQuery')) {
      * syntax) so special characters (*, ", ^, etc.) are treated as
      * literals rather than FTS5 operators.
      *
-     * Examples:
-     *   "intelligenza"        → "intelligenza"
-     *   "deep learning"       → "deep" "learning"   (both words must appear)
-     *   "l'IA"                → "l" "IA"             (apostrophe splits)
-     *   "php*"                → "php*"               (star escaped, literal)
+     * The LAST token gets a trailing * (prefix search) so that partial
+     * words typed by the user match while they are still typing:
+     *   "chatg"  → "chatg*"   matches "chatgpt", "chatgpt4", etc.
+     *   "deep l" → "deep" "l*" matches "deep learning", "deep logic", etc.
      *
-     * This is closer to LIKE '%q%' semantics than wrapping the whole
-     * input in a single phrase (which requires the exact sequence of
-     * tokens in order). Word-by-word AND gives better recall for
-     * multi-word queries while still being safe against FTS5 injection.
+     * Completed tokens (all but the last) are exact matches so earlier
+     * words don't expand unexpectedly.
+     *
+     * Examples:
+     *   "intelligenza"        → "intelligenza*"
+     *   "deep learning"       → "deep" "learning*"
+     *   "l'IA"                → "l" "IA*"
+     *   "chatg"               → "chatg*"   (finds chatgpt)
      *
      * Empty tokens (from multiple spaces, punctuation runs) are dropped.
      */
@@ -129,16 +132,23 @@ if (!function_exists('fts5EscapeQuery')) {
         $tokens = preg_split('/[\s\'\-\/\\\\]+/u', trim($query), -1, PREG_SPLIT_NO_EMPTY);
 
         if (empty($tokens)) {
-            // Fallback: return empty string — caller should check before querying.
             return '';
         }
 
-        // Wrap each token in double-quotes, escaping embedded double-quotes
-        // by doubling them (FTS5 quoted-string spec).
         $parts = [];
-        foreach ($tokens as $token) {
+        $last  = count($tokens) - 1;
+
+        foreach ($tokens as $i => $token) {
             if ($token === '') continue;
-            $parts[] = '"' . str_replace('"', '""', $token) . '"';
+            $escaped = str_replace('"', '""', $token);
+            // Add prefix wildcard to the last token for live-search UX.
+            // FTS5 prefix search: "tok*" matches any token starting with "tok".
+            // Note: the * must be OUTSIDE the quotes in FTS5 syntax.
+            if ($i === $last) {
+                $parts[] = '"' . $escaped . '"*';
+            } else {
+                $parts[] = '"' . $escaped . '"';
+            }
         }
 
         return implode(' ', $parts);

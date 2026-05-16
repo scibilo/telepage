@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.1] — 2026-05-16
+
+### Fixed
+
+- **Webhook async AI** (`api/webhook.php`): removed the synchronous
+  `AIService::processContent()` call from the webhook handler. Calling
+  Gemini inline blocked the 200 response for 1–5s; Telegram retries a
+  webhook that doesn't respond quickly enough, causing the same update
+  to be redelivered and processed twice (duplicate content or double
+  tags). The cron endpoint (`api/cron.php`) already handles the
+  `ai_processed=0` queue — the inline call was redundant and harmful.
+  Credit: u/Alpa_Cino on r/PHP.
+
 ## [1.1.0] — 2026-05-04
 
 ### Security (audit 2026-04 — all items closed)

@@ -126,6 +126,14 @@ $limit       = 10;
 $staleMinutes = 10;
 $pdo         = DB::get();
 
+// -----------------------------------------------------------------------
+// 1. Housekeeping
+// -----------------------------------------------------------------------
+
+// Prune stale update_id dedup rows (older than 7 days).
+// Telegram never redelivers beyond 24h; 7 days is a conservative window.
+DB::query("DELETE FROM processed_updates WHERE processed_at < datetime('now', '-7 days')");
+
 // Reset stale "in progress" rows (claimed but never finished).
 $pdo->exec(
     "UPDATE contents

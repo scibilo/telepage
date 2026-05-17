@@ -220,6 +220,30 @@ class DB
                 window_start INTEGER NOT NULL,
                 PRIMARY KEY (ip, endpoint)
             );
+
+            -- -------------------------------------------------------
+            -- Webhook update deduplication
+            --
+            -- Stores every Telegram update_id seen by the webhook.
+            -- Before any processing, the webhook checks this table:
+            --   - update_id present  → duplicate delivery, return 200
+            --                          silently (Telegram retried)
+            --   - update_id absent   → insert + process normally
+            --
+            -- This gates the dedup decision BEFORE the SELECT-first
+            -- upsert in TelegramBot, closing the race window where two
+            -- concurrent handlers both miss the SELECT and both attempt
+            -- INSERT, with the second taking a UNIQUE violation instead
+            -- of falling into the UPDATE path.
+            --
+            -- Rows older than 7 days are pruned by the cron job.
+            -- Telegram never redelivers an update beyond 24h, so 7 days
+            -- is a conservative retention window.
+            -- -------------------------------------------------------
+            CREATE TABLE IF NOT EXISTS processed_updates (
+                update_id    TEXT NOT NULL PRIMARY KEY,
+                processed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
         ");
 
         // ---------------------------------------------------------------

@@ -136,6 +136,43 @@ if (function_exists('fastcgi_finish_request')) {
 // Background processing (after sending 200 OK)
 // -----------------------------------------------------------------------
 
+// update_id dedup — gate BEFORE any work.
+//
+// Telegram redelivers an update if it doesn't receive a fast 2xx.
+// Without this check, two concurrent deliveries of the same update
+// can both miss the SELECT-first upsert in TelegramBot::upsertContent()
+// and both attempt INSERT — the second taking a UNIQUE violation instead
+// of falling into the UPDATE path. Gating here, before any DB work,
+// closes that race window entirely.
+//
+// INSERT OR IGNORE is atomic: only one concurrent handler wins the
+// race to insert the update_id row. The other gets 0 rows affected
+// and exits silently — a genuine no-op, not an error.
+//
+// Edits (edited_channel_post) carry a NEW update_id, so they pass
+// through this gate correctly and reach the UPDATE branch in upsertContent.
+
+$updateId = (string) ($update['update_id'] ?? '');
+
+if ($updateId !== '') {
+    try {
+        $pdo = DB::get();
+        $stmt = $pdo->prepare(
+            'INSERT OR IGNORE INTO processed_updates (update_id) VALUES (?)'
+        );
+        $stmt->execute([$updateId]);
+
+        if ($stmt->rowCount() === 0) {
+            // Already processed — this is a Telegram retry. Silent no-op.
+            exit;
+        }
+    } catch (Throwable $e) {
+        // Fail open: if the dedup table is unavailable, process anyway.
+        // A duplicate is less bad than a lost message.
+        error_log('[TELEPAGE][WEBHOOK] dedup check failed: ' . $e->getMessage());
+    }
+}
+
 try {
     $contentId = TelegramBot::handleUpdate($update);
 

@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.1.7] — 2026-05-17
+
+### Added
+
+- **Per-card SEO meta tags** (`index.php`, `app/Http.php`): when `?id=N`
+  is present in the URL, `index.php` loads the card from DB and injects
+  card-specific `<title>`, `<meta name="description">`, `og:type`,
+  `og:title`, `og:description`, `og:image`, `og:url`, `twitter:card`,
+  `twitter:title`, `twitter:description`, and `<link rel="canonical">`.
+  Without `?id=`, the page serves the existing generic site meta tags —
+  no behaviour change for the default view. Description uses AI summary
+  if available, truncated to 160 chars. `og:image` only emitted for
+  `https://` or `assets/` paths — no arbitrary URLs.
+
+- **Card permalink** (`assets/js/app.js`, `assets/css/style.css`): each
+  card now shows a 🔗 link pointing to `?id=N`, visible on hover. Allows
+  direct sharing and bookmarking of individual cards. Does not interfere
+  with the existing click-to-open-external behaviour.
+
+### Changed
+
+- **`detectBaseUrl()` consolidated** (`app/Http.php`,
+  `api/admin/helpers.php`): moved to `app/Http.php` (Composer files
+  autoload) so it works correctly from any entry-point. The previous
+  `__FILE__`-based version in `api/admin/helpers.php` returned wrong
+  paths when called from `index.php`. Duplicate removed from helpers.
+
 ## [1.1.6] — 2026-05-17
 
 ### Fixed

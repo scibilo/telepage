@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.1.6] — 2026-05-17
+
+### Fixed
+
+- **Webhook update_id deduplication** (`api/webhook.php`, `app/DB.php`,
+  `api/cron.php`): added `processed_updates(update_id TEXT PRIMARY KEY)`
+  table and an `INSERT OR IGNORE` check at webhook entry — before any DB
+  work — to close the SELECT-miss race condition. Two concurrent deliveries
+  of the same update now race atomically on `INSERT OR IGNORE`; exactly one
+  wins and proceeds, the other exits silently. The previous
+  `(telegram_message_id, telegram_chat_id)` UNIQUE index only caught
+  duplicates after the SELECT-first path, leaving a window where both
+  handlers could miss the SELECT and the second would take a UNIQUE
+  violation instead of falling into the UPDATE path. `edited_channel_post`
+  updates carry a new `update_id` and pass through the gate correctly.
+  Cron prunes rows older than 7 days. Migration: `bin/migrate-v116.php`.
+
 ## [1.1.5] — 2026-05-16
 
 ### Fixed

@@ -154,3 +154,63 @@ if (!function_exists('fts5EscapeQuery')) {
         return implode(' ', $parts);
     }
 }
+
+if (!function_exists('detectBaseUrl')) {
+
+    /**
+     * Detects the base URL of the Telepage installation.
+     *
+     * Works from any entry-point (index.php, api/webhook.php,
+     * api/admin.php, etc.) by using TELEPAGE_ROOT as the anchor
+     * instead of __FILE__, making it context-independent.
+     *
+     * Returns a URL without trailing slash, e.g.:
+     *   https://example.com/telepage
+     *   https://example.com
+     */
+    function detectBaseUrl(): string
+    {
+        $isHttps = (
+            (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ||
+            ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https'     ||
+            ($_SERVER['HTTP_X_FORWARDED_SSL']   ?? '') === 'on'        ||
+            ($_SERVER['HTTP_X_FORWARDED_PORT']  ?? '') === '443'
+        );
+
+        $scheme = $isHttps ? 'https' : 'http';
+
+        $serverName = $_SERVER['SERVER_NAME'] ?? '';
+        $httpHost   = $_SERVER['HTTP_HOST']   ?? '';
+        $host = ($serverName !== '' && $serverName !== '_' && $serverName !== 'default')
+            ? Str::safeHost($serverName, 'localhost')
+            : Str::safeHost($httpHost, 'localhost');
+
+        $docRoot = rtrim($_SERVER['DOCUMENT_ROOT'] ?? '', '/');
+        $appRoot = rtrim(defined('TELEPAGE_ROOT') ? TELEPAGE_ROOT : dirname(__DIR__), '/');
+
+        if ($docRoot !== '' && str_starts_with($appRoot, $docRoot)) {
+            $webPath = substr($appRoot, strlen($docRoot));
+        } else {
+            $script  = $_SERVER['SCRIPT_NAME'] ?? '';
+            $webPath = rtrim(dirname($script), '/');
+            // If called from a subdirectory (e.g. api/webhook.php), go up
+            // to the installation root by counting path components relative
+            // to TELEPAGE_ROOT.
+            if (defined('TELEPAGE_ROOT')) {
+                $depth = substr_count(
+                    str_replace('\\', '/', realpath($_SERVER['SCRIPT_FILENAME'] ?? '') ?: ''),
+                    '/',
+                ) - substr_count(
+                    str_replace('\\', '/', $appRoot),
+                    '/'
+                );
+                // Simpler fallback: use dirname() on SCRIPT_NAME $depth-1 times
+                for ($i = 1; $i < $depth; $i++) {
+                    $webPath = rtrim(dirname($webPath), '/');
+                }
+            }
+        }
+
+        return $scheme . '://' . $host . $webPath;
+    }
+}

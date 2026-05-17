@@ -140,7 +140,10 @@
                     <div class="card-tags">${tagsHtml}</div>
                     <div class="card-footer">
                         <span class="card-date">${date}</span>
-                        ${card.url ? `<span class="card-link-hint">↗ apri</span>` : ""}
+                        <div class="card-actions">
+                            <a href="?id=${card.id}" class="card-permalink" title="Link diretto a questa card" onclick="event.stopPropagation()">🔗</a>
+                            ${card.url ? `<span class="card-link-hint">↗ apri</span>` : ""}
+                        </div>
                     </div>
                 </div>`;
 

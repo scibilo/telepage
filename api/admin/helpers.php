@@ -103,34 +103,5 @@ function jsonError(int $code, string $message): never
     exit;
 }
 
-function detectBaseUrl(): string
-{
-    $is_https = ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ||
-                 ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https' ||
-                 ($_SERVER['HTTP_X_FORWARDED_SSL'] ?? '') === 'on' ||
-                 ($_SERVER['HTTP_X_FORWARDED_PORT'] ?? '') === '443');
-
-    $scheme = $is_https ? 'https' : 'http';
-
-    $serverName = $_SERVER['SERVER_NAME'] ?? '';
-    $httpHost   = $_SERVER['HTTP_HOST']   ?? '';
-    if ($serverName !== '' && $serverName !== '_' && $serverName !== 'default') {
-        $host = Str::safeHost($serverName, 'localhost');
-    } else {
-        $host = Str::safeHost($httpHost, 'localhost');
-    }
-
-    $docRoot  = rtrim($_SERVER['DOCUMENT_ROOT'] ?? '', '/');
-    $fileDir  = rtrim(dirname(__FILE__), '/');
-    $appRoot  = rtrim(dirname(dirname($fileDir)), '/'); // api/admin/ → root
-
-    if (!empty($docRoot) && str_starts_with($appRoot, $docRoot)) {
-        $webPath = substr($appRoot, strlen($docRoot));
-    } else {
-        $script  = $_SERVER['SCRIPT_NAME'] ?? '';
-        $webPath = rtrim(dirname(dirname($script)), '/');
-    }
-
-    $base = $scheme . '://' . $host . $webPath;
-    return str_replace('http://', 'https://', $base);
-}
+// detectBaseUrl() is defined in app/Http.php (loaded via Composer
+// files autoload) and works from any entry-point. No local copy needed.

@@ -543,6 +543,23 @@ body {
     opacity: 1;
 }
 
+.card-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.card-permalink {
+    font-size: 11px;
+    text-decoration: none;
+    opacity: 0.4;
+    transition: opacity 0.2s;
+    line-height: 1;
+}
+.content-card:hover .card-permalink {
+    opacity: 0.8;
+}
+
 /* ── Bottone reset filtri ──────────────────────────────────────────── */
 .btn-reset-filters {
     display: block;

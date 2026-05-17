@@ -52,6 +52,67 @@ $appName = $config['app_name'] ?? 'Telepage';
 $themeColor = Str::safeHexColor($config['theme_color'] ?? null);
 $logoPath = $config['logo_path'] ?? 'assets/img/logo.png';
 
+// -----------------------------------------------------------------------
+// Per-card SEO: if ?id= is present, load the card and build specific
+// meta tags. This makes individual cards indexable by Google — each
+// card gets its own <title>, <meta description>, and og:* tags.
+//
+// Security:
+//   - $cardId cast to int immediately — SQL injection impossible
+//   - All values run through htmlspecialchars() before HTML output
+//   - is_deleted=0 filter — deleted content never exposed
+//   - og:image validated: only https:// URLs or local assets/ paths
+//   - canonical URL generated server-side — no user input involved
+// -----------------------------------------------------------------------
+
+$cardId   = (int) ($_GET['id'] ?? 0);
+$cardMeta = null;
+
+if ($cardId > 0) {
+    $cardMeta = DB::fetchOne(
+        'SELECT id, title, description, ai_summary, image, image_source
+         FROM contents
+         WHERE id = :id AND is_deleted = 0',
+        [':id' => $cardId]
+    );
+}
+
+// Build meta values — fall back to site defaults if no card found.
+$metaTitle       = $appName . ' — Telegram Hub';
+$metaDescription = $lang['footer_text'] ?? '';
+$metaOgImage     = '';
+$metaCanonical   = '';
+
+if ($cardMeta) {
+    $cardTitle = trim($cardMeta['title'] ?? '');
+    if ($cardTitle !== '') {
+        $metaTitle = $cardTitle . ' — ' . $appName;
+    }
+
+    // Prefer AI summary for description (more informative), fall back to description.
+    // Truncate to 160 characters — Google truncates at ~155-160.
+    $rawDesc = trim($cardMeta['ai_summary'] ?? '') ?: trim($cardMeta['description'] ?? '');
+    if ($rawDesc !== '') {
+        $metaDescription = mb_strlen($rawDesc) > 160
+            ? mb_substr($rawDesc, 0, 157) . '...'
+            : $rawDesc;
+    }
+
+    // og:image: only allow https:// external URLs or local assets/ paths.
+    // Never emit arbitrary URLs that could be SSRF vectors in crawlers.
+    $img = trim($cardMeta['image'] ?? '');
+    if (str_starts_with($img, 'https://') || str_starts_with($img, 'assets/')) {
+        $metaOgImage = $img;
+        // Convert local path to absolute URL for og:image.
+        if (str_starts_with($img, 'assets/')) {
+            $metaOgImage = detectBaseUrl() . '/' . $img;
+        }
+    }
+
+    // Canonical: server-side generated, no user input.
+    $metaCanonical = detectBaseUrl() . '/?id=' . $cardId;
+}
+
 // Estrai parametri per stato iniziale (se presenti nell'URL)
 $initialTag  = trim($_GET['tag'] ?? '');
 $initialType = trim($_GET['type'] ?? '');
@@ -81,8 +142,26 @@ $tags = DB::fetchAll('SELECT t.name, t.slug, t.color, COUNT(ct.content_id) as us
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
-    <title><?= htmlspecialchars($appName) ?> — Telegram Hub</title>
-    <meta name="description" content="<?= htmlspecialchars($lang['footer_text']) ?>">
+    <title><?= htmlspecialchars($metaTitle, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?></title>
+    <meta name="description" content="<?= htmlspecialchars($metaDescription, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>">
+
+    <?php if ($cardMeta): ?>
+    <!-- Per-card Open Graph / Twitter Card meta tags -->
+    <meta property="og:type"        content="article">
+    <meta property="og:title"       content="<?= htmlspecialchars($metaTitle, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>">
+    <meta property="og:description" content="<?= htmlspecialchars($metaDescription, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>">
+    <?php if ($metaOgImage !== ''): ?>
+    <meta property="og:image"       content="<?= htmlspecialchars($metaOgImage, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>">
+    <meta name="twitter:card"       content="summary_large_image">
+    <meta name="twitter:image"      content="<?= htmlspecialchars($metaOgImage, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>">
+    <?php else: ?>
+    <meta name="twitter:card"       content="summary">
+    <?php endif; ?>
+    <meta property="og:url"         content="<?= htmlspecialchars($metaCanonical, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>">
+    <meta name="twitter:title"      content="<?= htmlspecialchars($metaTitle, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>">
+    <meta name="twitter:description" content="<?= htmlspecialchars($metaDescription, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>">
+    <link rel="canonical"           href="<?= htmlspecialchars($metaCanonical, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>">
+    <?php endif; ?>
     
     <!-- Theme & Icons -->
     <meta name="theme-color" content="<?= $themeColor ?>">
